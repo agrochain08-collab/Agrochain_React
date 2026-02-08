@@ -1,13 +1,16 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const fs = require("fs");
+const path = require("path");
 
 // Load environment variables first
 dotenv.config();
 
 const app = express();
 
-// ✅ Updated CORS configuration to allow Vercel + Render + Localhost
 const allowedOrigins = [
   "https://agrochain-teal.vercel.app",
   "https://agrochain-i1h0.onrender.com",
@@ -19,6 +22,15 @@ const allowedOrigins = [
   "http://127.0.0.1:5500",
   "http://localhost:3001"
 ];
+
+const errorLogPath = path.join(__dirname, "logs", "error.log");
+
+const logStream = fs.createWriteStream(
+  path.join(__dirname, "logs", "access.log"),
+  { flags: "a" }
+);
+
+app.use(morgan("combined", { stream: logStream }));
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -36,6 +48,7 @@ app.use(cors({
 
 
 app.use(express.json());
+app.use(helmet());
 
 // Routes
 app.use("/api/auth", require("./routes/auth"));
@@ -61,18 +74,45 @@ app.get("/", (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ msg: "Something went wrong!" });
+
+// --- Test 500 error route 
+app.get("/test-error", (req, res, next) => {
+  next(new Error("Intentional test error for middleware demo"));
 });
 
-// 404 handler - catch all unmatched routes
-app.use((req, res) => {
-  res.status(404).json({ 
-    msg: "API endpoint not found", 
-    path: req.path,
-    method: req.method 
+
+// --- Central error-handling middleware
+app.use((err, req, res, next) => {
+  const logEntry = `
+[${new Date().toISOString()}]
+Method: ${req.method}
+Path: ${req.originalUrl}
+Message: ${err.message}
+Stack:
+${err.stack}
+---------------------------------------
+`;
+
+  fs.appendFile(errorLogPath, logEntry, (e) => {
+    if (e) console.error("Failed to write error log:", e);
+  });
+
+  res.status(500).json({
+    success: false,
+    message: "Internal Server Error"
   });
 });
+
+
+// --- 404 handler 
+app.use((req, res) => {
+  res.status(404).json({
+    msg: "API endpoint not found",
+    path: req.path,
+    method: req.method
+  });
+});
+
+
 
 module.exports = app;
