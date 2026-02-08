@@ -13,8 +13,7 @@ exports.getDealerProfile = async (req, res) => {
     if (!dealer) return res.status(404).json({ msg: "Dealer not found" });
     res.json(dealer);
   } catch (err) {
-    console.error("Error fetching dealer profile:", err);
-    res.status(500).json({ msg: "Error fetching profile" });
+    next(err);
   }
 };
 
@@ -29,8 +28,7 @@ exports.updateDealerProfile = async (req, res) => {
     if (!dealer) return res.status(404).json({ msg: "Dealer not found" });
     res.json(dealer);
   } catch (err) {
-    console.error("Error updating dealer profile:", err);
-    res.status(500).json({ msg: "Error updating profile" });
+    next(err);
   }
 };
 
@@ -73,8 +71,7 @@ exports.addVehicle = async (req, res) => {
     });
     
   } catch (err) {
-    console.error("Error adding vehicle:", err);
-    res.status(500).json({ msg: "Error adding vehicle" });
+     next(err);
   }
 };
 
@@ -89,8 +86,7 @@ exports.getVehicles = async (req, res) => {
     
     res.json(vehicles);
   } catch (err) {
-    console.error("Error fetching vehicles:", err);
-    res.status(500).json({ msg: "Error fetching vehicles" });
+     next(err);
   }
 };
 
@@ -120,8 +116,7 @@ exports.updateVehicleStatus = async (req, res) => {
     });
     
   } catch (err) {
-    console.error("Error updating vehicle status:", err);
-    res.status(500).json({ msg: "Error updating vehicle status" });
+     next(err);
   }
 };
 
@@ -152,8 +147,7 @@ exports.deleteVehicle = async (req, res) => {
     res.json({ msg: "Vehicle deleted successfully" });
 
   } catch (err) {
-    console.error("Error deleting vehicle:", err);
-    res.status(500).json({ msg: "Error deleting vehicle" });
+    next(err);
   }
 };
 
@@ -190,8 +184,7 @@ exports.getAllProducts = async (req, res) => {
 
     res.json(allProducts);
   } catch (err) {
-    console.error("Error fetching all products:", err);
-    res.status(500).json({ msg: "Error fetching products" });
+   next(err);
   }
 };
 
@@ -303,8 +296,7 @@ exports.assignVehicle = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("=== ASSIGNMENT ERROR ===");
-    console.error("Error:", err);
+    next(err);
     
     res.status(500).json({ 
       msg: "Internal server error during vehicle assignment",
@@ -374,8 +366,7 @@ exports.freeVehicle = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error freeing vehicle:", err);
-    res.status(500).json({ msg: "Error freeing vehicle" });
+    next(err);
   }
 };
 
@@ -448,13 +439,7 @@ exports.placeBid = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("=== BID PLACEMENT ERROR ===");
-    console.error("Error:", err);
-    console.error("Stack:", err.stack);
-    res.status(500).json({ 
-      msg: "Error placing bid",
-      error: err.message 
-    });
+     next(err);
   }
 };
 
@@ -501,8 +486,7 @@ exports.getDealerOrders = async (req, res) => {
 
     res.json(populatedOrders);
   } catch (err) {
-    console.error("Error fetching dealer orders:", err);
-    res.status(500).json({ msg: "Error fetching orders" });
+    next(err);
   }
 };
 
@@ -559,8 +543,7 @@ exports.submitReview = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error submitting review:", err);
-    res.status(500).json({ msg: "Error submitting review" });
+     next(err);
   }
 };
 
@@ -606,8 +589,7 @@ exports.updateInventoryPrice = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error updating inventory price:", err);
-    res.status(500).json({ msg: "Error updating price" });
+    next(err);
   }
 };
 
@@ -654,8 +636,7 @@ exports.updateInventoryQuantity = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error updating inventory quantity:", err);
-    res.status(500).json({ msg: "Error updating quantity" });
+    next(err);
   }
 };
 
@@ -689,8 +670,7 @@ exports.removeInventoryItem = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error removing inventory item:", err);
-    res.status(500).json({ msg: "Error removing item" });
+    next(err);
   }
 };
 
@@ -714,8 +694,7 @@ exports.getRetailerOrders = async (req, res) => {
     
     res.json(orders);
   } catch (err) {
-    console.error("❌ Error fetching retailer orders:", err);
-    res.status(500).json({ msg: "Error fetching retailer orders", error: err.message });
+     next(err);
   }
 };
 

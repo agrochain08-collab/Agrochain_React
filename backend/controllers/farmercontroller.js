@@ -13,19 +13,18 @@ function generateReceiptNumber() {
 }
 
 // ---------- Get Farmer Profile ----------
-exports.getFarmerProfile = async (req, res) => {
+exports.getFarmerProfile = async (req, res, next) => {
   try {
     const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
     res.json(farmer);
   } catch (err) {
-    console.error("Error fetching farmer profile:", err);
-    res.status(500).json({ msg: "Error fetching profile" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Update Farmer Profile ----------
-exports.updateFarmerProfile = async (req, res) => {
+exports.updateFarmerProfile = async (req, res, next) => {
   try {
     const farmer = await User.findOneAndUpdate(
       { email: req.params.email, role: "farmer" },
@@ -35,13 +34,12 @@ exports.updateFarmerProfile = async (req, res) => {
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
     res.json(farmer);
   } catch (err) {
-    console.error("Error updating farmer profile:", err);
-    res.status(500).json({ msg: "Error updating profile" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Add Crop ----------
-exports.addCrop = async (req, res) => {
+exports.addCrop = async (req, res, next) => {
   try {
     const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
@@ -73,8 +71,9 @@ exports.addCrop = async (req, res) => {
       const uploadResult = await cloudinary.uploader.upload(imageFile.path);
       imageUrl = uploadResult.secure_url;
     } catch (err) {
-      console.error("Image upload error:", err);
-      return res.status(500).json({ msg: "Error uploading image" });
+      const uploadError = new Error("Error uploading image to Cloudinary");
+      uploadError.originalError = err;
+      return next(uploadError); // Pass to error middleware
     }
 
     const newCrop = {
@@ -98,13 +97,12 @@ exports.addCrop = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error adding crop:", err);
-    res.status(500).json({ msg: "Internal Server Error while adding product" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Get Crops ----------
-exports.getCrops = async (req, res) => {
+exports.getCrops = async (req, res, next) => {
   try {
     const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
@@ -114,13 +112,12 @@ exports.getCrops = async (req, res) => {
     
     res.json(crops);
   } catch (err) {
-    console.error("Error fetching crops:", err);
-    res.status(500).json({ msg: "Error fetching crops" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Update Crop (FIXED: Now uses MongoDB _id) ----------
-exports.updateCrop = async (req, res) => {
+exports.updateCrop = async (req, res, next) => {
   try {
     const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
@@ -155,8 +152,9 @@ exports.updateCrop = async (req, res) => {
         const uploadResult = await cloudinary.uploader.upload(req.file.path);
         crop.imageUrl = uploadResult.secure_url;
       } catch (uploadErr) {
-        console.error("Image upload error:", uploadErr);
-        return res.status(500).json({ msg: "Error uploading new image" });
+        const error = new Error("Error uploading new image to Cloudinary");
+        error.originalError = uploadErr;
+        return next(error); // Pass to error middleware
       }
     }
 
@@ -169,13 +167,12 @@ exports.updateCrop = async (req, res) => {
     });
     
   } catch (err) {
-    console.error("Error updating crop:", err);
-    res.status(500).json({ msg: "Error updating product" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Delete Crop (FIXED: Now uses MongoDB _id) ----------
-exports.deleteCrop = async (req, res) => {
+exports.deleteCrop = async (req, res, next) => {
   try {
     const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
@@ -203,20 +200,18 @@ exports.deleteCrop = async (req, res) => {
       });
     }
 
-
     farmer.crops.splice(cropIndex, 1);
     await farmer.save();
 
     res.json({ msg: "Product deleted successfully" });
     
   } catch (err) {
-    console.error("Error deleting crop:", err);
-    res.status(500).json({ msg: "Error deleting product" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Accept Bid ----------
-exports.acceptBid = async (req, res) => {
+exports.acceptBid = async (req, res, next) => {
   try {
     const { orderId } = req.body;
     const { email } = req.params;
@@ -310,13 +305,12 @@ exports.acceptBid = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error accepting bid:", err);
-    res.status(500).json({ msg: "Error accepting bid" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Reject Bid ----------
-exports.rejectBid = async (req, res) => {
+exports.rejectBid = async (req, res, next) => {
   try {
     const { orderId } = req.body;
     const { email } = req.params;
@@ -377,13 +371,12 @@ exports.rejectBid = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error rejecting bid:", err);
-    res.status(500).json({ msg: "Error rejecting bid" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Get Farmer Orders ----------
-exports.getFarmerOrders = async (req, res) => {
+exports.getFarmerOrders = async (req, res, next) => {
   try {
     const orders = await Order.find({ farmerEmail: req.params.email })
       .sort({ assignedDate: -1 });
@@ -423,13 +416,12 @@ exports.getFarmerOrders = async (req, res) => {
 
     res.json(populatedOrders);
   } catch (err) {
-    console.error("Error fetching farmer orders:", err);
-    res.status(500).json({ msg: "Error fetching orders" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // ---------- Get Farmer Notifications ----------
-exports.getFarmerNotifications = async (req, res) => {
+exports.getFarmerNotifications = async (req, res, next) => {
   try {
     const farmerEmail = req.params.email;
     
@@ -463,13 +455,12 @@ exports.getFarmerNotifications = async (req, res) => {
     res.json(formattedNotifications);
 
   } catch (err) {
-    console.error("Error fetching farmer notifications:", err);
-    res.status(500).json({ msg: "Error fetching notifications" });
+    next(err); // Pass error to error middleware
   }
 };
 
 // Mark Notifications as Read
-exports.markNotificationsAsRead = async (req, res) => {
+exports.markNotificationsAsRead = async (req, res, next) => {
   try {
     const farmerEmail = req.params.email;
 
@@ -507,7 +498,6 @@ exports.markNotificationsAsRead = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Error marking notifications as read:", err);
-    res.status(500).json({ msg: "Error marking notifications as read" });
+    next(err); // Pass error to error middleware
   }
 };

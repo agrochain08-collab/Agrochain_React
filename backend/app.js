@@ -23,12 +23,16 @@ const allowedOrigins = [
   "http://localhost:3001"
 ];
 
-const errorLogPath = path.join(__dirname, "logs", "error.log");
+// Ensure logs directory exists
+const logsDir = path.join(__dirname, "logs");
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
 
-const logStream = fs.createWriteStream(
-  path.join(__dirname, "logs", "access.log"),
-  { flags: "a" }
-);
+const errorLogPath = path.join(__dirname, "logs", "error.log");
+const accessLogPath = path.join(__dirname, "logs", "access.log");
+
+const logStream = fs.createWriteStream(accessLogPath, { flags: "a" });
 
 app.use(morgan("combined", { stream: logStream }));
 
@@ -46,7 +50,6 @@ app.use(cors({
   credentials: true
 }));
 
-
 app.use(express.json());
 app.use(helmet());
 
@@ -56,7 +59,6 @@ app.use("/api/farmer", require("./routes/farmer"));
 app.use("/api/dealer", require("./routes/dealer"));
 app.use("/api/retailer", require("./routes/retailer"));
 app.use("/api/admin", require("./routes/admin"));
-
 
 // Health check route
 app.get("/", (req, res) => {
@@ -73,46 +75,67 @@ app.get("/", (req, res) => {
   });
 });
 
-// Error handling middleware
-
-// --- Test 500 error route 
-app.get("/test-error", (req, res, next) => {
-  next(new Error("Intentional test error for middleware demo"));
-});
-
-
-// --- Central error-handling middleware
+// ============================================
+// CENTRAL ERROR-HANDLING MIDDLEWARE
+// ============================================
 app.use((err, req, res, next) => {
+  // Prepare detailed error log entry
+  const timestamp = new Date().toISOString();
   const logEntry = `
-[${new Date().toISOString()}]
+===============================================
+[${timestamp}]
 Method: ${req.method}
 Path: ${req.originalUrl}
-Message: ${err.message}
-Stack:
-${err.stack}
----------------------------------------
+IP: ${req.ip || req.connection.remoteAddress}
+User-Agent: ${req.get('user-agent') || 'N/A'}
+Error Message: ${err.message}
+===============================================
 `;
 
-  fs.appendFile(errorLogPath, logEntry, (e) => {
-    if (e) console.error("Failed to write error log:", e);
+  // Log to console for immediate visibility
+  console.error("❌ Error occurred:", err.message);
+
+  // Append to error.log file
+  fs.appendFile(errorLogPath, logEntry, (writeErr) => {
+    if (writeErr) {
+      console.error("⚠️ Failed to write to error.log:", writeErr);
+    } else {
+      console.log("✅ Error logged to error.log");
+    }
   });
 
-  res.status(500).json({
+  // Send response to client
+  res.status(err.status || 500).json({
     success: false,
-    message: "Internal Server Error"
+    message: err.message || "Internal Server Error",
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
 });
 
-
-// --- 404 handler 
+// ============================================
+// 404 HANDLER (must be after error middleware)
+// ============================================
 app.use((req, res) => {
+  const timestamp = new Date().toISOString();
+  const notFoundLog = `
+[${timestamp}] 404 Not Found
+Method: ${req.method}
+Path: ${req.originalUrl}
+IP: ${req.ip || req.connection.remoteAddress}
+-------------------------------------------
+`;
+
+  // Log 404 errors to error.log as well
+  fs.appendFile(errorLogPath, notFoundLog, (err) => {
+    if (err) console.error("Failed to log 404 error:", err);
+  });
+
   res.status(404).json({
+    success: false,
     msg: "API endpoint not found",
     path: req.path,
     method: req.method
   });
 });
-
-
 
 module.exports = app;

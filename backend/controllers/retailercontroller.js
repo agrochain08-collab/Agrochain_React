@@ -31,8 +31,7 @@ exports.getDealerInventories = async (req, res) => {
     console.log('Sample inventory item with reviews:', allInventory[0]?.retailerReviews); // Debug log
     res.json(allInventory);
   } catch (err) {
-    console.error("Error fetching all dealer inventories:", err);
-    res.status(500).json({ msg: "Error fetching inventories" });
+     next(err);
   }
 };
 
@@ -90,8 +89,7 @@ exports.placeOrder = async (req, res) => {
     
     res.status(201).json({ msg: "Order(s) placed successfully!", orders: createdOrders });
   } catch (err) {
-    console.error("Error placing retailer order:", err);
-    res.status(500).json({ msg: "Server error while placing order" });
+   next(err);
   }
 };
 
@@ -102,8 +100,7 @@ exports.getOrders = async (req, res) => {
         const orders = await RetailerOrder.find({ retailerEmail }).sort({ createdAt: -1 });
         res.json(orders);
     } catch (err) {
-        console.error("Error fetching retailer orders:", err);
-        res.status(500).json({ msg: "Error fetching orders" });
+      next(err);
     }
 };
 

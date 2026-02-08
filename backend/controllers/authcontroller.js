@@ -67,8 +67,7 @@ exports.sendOTP = async (req, res) => {
     res.json({ msg: "OTP sent successfully to your email" });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Failed to send OTP" });
+    next(err);
   }
 };
 
@@ -120,8 +119,7 @@ exports.sendLoginOTP = async (req, res) => {
     res.json({ msg: "Login OTP sent successfully to your email" });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Failed to send login OTP" });
+     next(err);
   }
 };
 
@@ -154,8 +152,7 @@ exports.verifyOTP = async (req, res) => {
     res.json({ msg: "Email verified successfully" });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "OTP verification failed" });
+     next(err);
   }
 };
 
@@ -210,8 +207,7 @@ exports.verifyLoginOTP = async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Login verification failed" });
+     next(err);
   }
 };
 
@@ -397,8 +393,7 @@ exports.signup = async (req, res) => {
     res.status(201).json({ msg: "User registered successfully", user });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Server error" });
+     next(err);
   }
 };
 
@@ -466,8 +461,7 @@ exports.signupWithGoogle = async (req, res) => {
     res.status(201).json({ msg: "User registered successfully with Google", user });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Server error" });
+    next(err);
   }
 };
 
@@ -481,7 +475,6 @@ exports.updateFarmerProfile = async (req, res) => {
 
     res.json({ msg: "Profile updated successfully", user });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ msg: "Server error" });
+     next(err);
   }
 };
