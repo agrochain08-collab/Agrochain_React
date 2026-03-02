@@ -2,6 +2,7 @@ const User = require("../models/user");
 const Order = require("../models/order");
 const RetailerOrder = require("../models/retailerOrder");
 const Log = require("../models/log");
+const Representative = require("../models/representative");
 
 /* ===============================
    1. ENHANCED SYSTEM ANALYTICS
@@ -480,8 +481,92 @@ exports.adminDeleteProduct = async (req, res) => {
   }
 };
 
-module.exports = exports;
+/* ===============================
+   6. REPRESENTATIVE MANAGEMENT
+   =============================== */
 
+// Get all authorized representative emails
+exports.getRepresentatives = async (req, res) => {
+  try {
+    const reps = await Representative.find().sort({ createdAt: -1 });
+    res.json(reps);
+  } catch (err) {
+    console.error("Error fetching representatives:", err);
+    res.status(500).json({ msg: "Error fetching representatives" });
+  }
+};
 
+// Add a new representative email
+exports.addRepresentative = async (req, res) => {
+  try {
+    const { email, note } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ msg: "Email is required" });
+    }
+
+    const emailLower = email.toLowerCase().trim();
+
+    // Check if already exists
+    const existing = await Representative.findOne({ email: emailLower });
+    if (existing) {
+      return res.status(409).json({ msg: "This email is already a registered representative" });
+    }
+
+    const rep = new Representative({
+      email: emailLower,
+      note: note || "",
+      addedBy: req.user?.email || "admin",
+    });
+
+    await rep.save();
+
+    await createLog(
+      req.user?.email || "admin",
+      "other",
+      `ADMIN ACTION: Added representative email: ${emailLower}`
+    );
+
+    res.status(201).json({ msg: "Representative added successfully", representative: rep });
+  } catch (err) {
+    console.error("Error adding representative:", err);
+    res.status(500).json({ msg: "Error adding representative" });
+  }
+};
+
+// Remove a representative email by ID
+exports.deleteRepresentative = async (req, res) => {
+  try {
+    const rep = await Representative.findByIdAndDelete(req.params.id);
+
+    if (!rep) {
+      return res.status(404).json({ msg: "Representative not found" });
+    }
+
+    await createLog(
+      req.user?.email || "admin",
+      "other",
+      `ADMIN ACTION: Removed representative email: ${rep.email}`
+    );
+
+    res.json({ msg: "Representative removed successfully" });
+  } catch (err) {
+    console.error("Error deleting representative:", err);
+    res.status(500).json({ msg: "Error deleting representative" });
+  }
+};
+
+// Public endpoint: check if an email is an authorized representative
+// Used by the login flow - does NOT require admin auth
+exports.checkRepresentative = async (req, res) => {
+  try {
+    const { email } = req.params;
+    const rep = await Representative.findOne({ email: email.toLowerCase().trim() });
+    res.json({ isRepresentative: !!rep });
+  } catch (err) {
+    console.error("Error checking representative:", err);
+    res.status(500).json({ msg: "Error checking representative status" });
+  }
+};
 
 module.exports = exports;

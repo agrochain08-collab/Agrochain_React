@@ -1,3 +1,4 @@
+const Representative = require("../models/representative");
 const User = require("../models/user");
 const nodemailer = require("nodemailer");
 const crypto = require("crypto");
@@ -80,10 +81,26 @@ exports.sendLoginOTP = async (req, res) => {
       return res.status(400).json({ msg: "Email is required" });
     }
 
-    // Check if user exists
-    const user = await User.findOne({ email });
+    // Check if user exists — or if they are a whitelisted representative
+    let user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ msg: "Email not registered. Please signup first." });
+      // Check if this email is an authorized representative
+      const rep = await Representative.findOne({ email: email.toLowerCase().trim() });
+      if (!rep) {
+        return res.status(400).json({ msg: "Email not registered. Please signup first." });
+      }
+
+      // Auto-create a minimal representative user so OTP login can proceed
+      user = new User({
+        role: "farmer", // placeholder — redirect is handled by the representative check on the frontend
+        firstName: "Representative",
+        lastName: "",
+        mobile: "0000000000",
+        email: email.toLowerCase().trim(),
+        emailVerified: true,
+        googleAuth: false,
+      });
+      await user.save();
     }
 
     // Generate 6-digit OTP
@@ -305,6 +322,43 @@ exports.verifyGoogleLogin = async (req, res) => {
           email: adminUser.email,
           firstName: adminUser.firstName,
           role: "admin",
+        },
+      });
+    }
+
+    // 🔹 Representative auto-register (Google login)
+    const rep = await Representative.findOne({ email: email.toLowerCase().trim() });
+    if (rep) {
+      // Find or auto-create a User record for this representative
+      let repUser = await User.findOne({ email });
+      if (!repUser) {
+        repUser = new User({
+          role: "farmer", // placeholder — frontend redirects based on representative check
+          firstName: given_name || "Representative",
+          lastName: family_name || "",
+          mobile: "0000000000",
+          email: email.toLowerCase().trim(),
+          emailVerified: true,
+          googleAuth: true,
+        });
+        await repUser.save();
+      }
+
+      const repToken = jwt.sign(
+        { id: repUser._id, role: repUser.role, email: repUser.email },
+        process.env.JWT_SECRET,
+        { expiresIn: "1d" }
+      );
+
+      return res.json({
+        msg: "Google login successful",
+        token: repToken,
+        role: repUser.role,
+        user: {
+          id: repUser._id,
+          email: repUser.email,
+          firstName: repUser.firstName,
+          role: repUser.role,
         },
       });
     }

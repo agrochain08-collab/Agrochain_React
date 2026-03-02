@@ -44,11 +44,28 @@ const Login = () => {
     return () => clearInterval(interval);
   }, [showOtp, timer]);
 
-  // Redirect based on role
-  const redirectToRolePage = (user) => {
+  // Redirect based on role — also checks if the user is a whitelisted representative
+  const redirectToRolePage = async (user) => {
+    // Admin shortcut (hardcoded admin email)
     if (user.email === "agrochain08@gmail.com") {
       navigate("/admin");
-    } else if (user.role === 'farmer') {
+      return;
+    }
+
+    // Check if the email is a registered representative
+    try {
+      const repCheck = await api.get(`/admin/representatives/check/${encodeURIComponent(user.email)}`);
+      if (repCheck.data.isRepresentative) {
+        navigate("/representative");
+        return;
+      }
+    } catch (err) {
+      // If the check fails, fall through to normal role-based routing
+      console.warn("Representative check failed, falling back to role routing:", err);
+    }
+
+    // Normal role-based routing
+    if (user.role === 'farmer') {
       navigate('/farmer');
     } else if (user.role === 'dealer') {
       navigate('/dealer');

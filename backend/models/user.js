@@ -35,9 +35,44 @@ const userSchema = new mongoose.Schema({
       unitOfSale: { type: String, required: true },         // Kg, Box (20 Kg), Crate, etc.
       targetPrice: { type: Number, required: true },        // Price in rupees
       availabilityStatus: { type: String, default: "" },
-      imageUrl: { type: String, required: true },           // Product image URL
+      imageUrl: { type: String, default: "" },              // Set by representative on approval
       dateAdded: { type: Date, default: Date.now },
       lastUpdated: { type: Date, default: Date.now },
+
+      // Farmer-provided details at submission
+      harvestDate:     { type: Date },
+      farmerVillage:   { type: String, default: '' },
+      additionalNotes: { type: String, default: '' },
+      batchId:         { type: String, default: '' }, // crops submitted together share same batchId
+
+      // Verification workflow
+      verificationStatus: {
+        type: String,
+        enum: ['pending', 'claimed', 'in_verification', 'approved', 'rejected'],
+        default: 'pending'
+      },
+      approvalStatus: {                                      // kept for backward compat
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+      },
+      claimedBy:     { type: String, default: '' },          // representative email
+      claimedByName: { type: String, default: '' },          // representative display name
+      claimedAt:     { type: Date },
+
+      representativeImages: [{ type: String }],              // product images added by rep
+      fieldImages:          [{ type: String }],              // farm/field images by rep
+      expiryDate:           { type: Date },
+      qualityReport: {
+        grade:            { type: String, enum: ['A', 'B', 'C', 'D', ''], default: '' },
+        pesticidesUsed:   { type: String, default: '' },
+        storageCondition: { type: String, default: '' },
+        harvestCondition: { type: String, default: '' },
+        verifiedQuantity: { type: Number },
+        remarks:          { type: String, default: '' },
+        inspectedBy:      { type: String, default: '' },
+        inspectedAt:      { type: Date }
+      },
       
       // Product reviews from dealers
       reviews: [{

@@ -8,17 +8,11 @@ const { authorize } = require("../middleware/roleMiddleware");
 const router = express.Router();
 const { upload } = require("../config/cloudinary");
 const { 
-  getFarmerProfile, 
-  updateFarmerProfile, 
-  addCrop, 
-  getCrops, 
-  updateCrop,
-  deleteCrop,
-  getFarmerOrders,
-  getFarmerNotifications,
-  acceptBid, 
-  rejectBid,
-  markNotificationsAsRead  // ADD THIS
+  getFarmerProfile, updateFarmerProfile,
+  addCrop, addBulkCrops,
+  getCrops, updateCrop, deleteCrop,
+  getFarmerOrders, getFarmerNotifications,
+  acceptBid, rejectBid, markNotificationsAsRead
 } = require("../controllers/farmercontroller");
 
 // ===========================
@@ -30,9 +24,10 @@ router.put("/profile/:email", protect,authorize('farmer'),updateFarmerProfile);
 // ===========================
 // CROP/PRODUCT MANAGEMENT ROUTES
 // ===========================
-router.post("/crops/:email",protect, authorize('farmer'),upload.single("image"), addCrop);
+router.post("/crops/:email", protect, authorize('farmer'), addCrop);
+router.post("/crops-bulk/:email", protect, authorize('farmer'), addBulkCrops);
 router.get("/crops/:email", protect,authorize('farmer'),getCrops);
-router.put("/crops/:email/:id",protect, authorize('farmer'),upload.single("image"), updateCrop);
+router.put("/crops/:email/:id", protect, authorize('farmer'), updateCrop);
 router.delete("/crops/:email/:id",protect,authorize('farmer'), deleteCrop);
 
 // ===========================

@@ -77,6 +77,13 @@ const AdminNavbar = ({ onSignout, onNavigate, activeSection }) => {
         >
           📜 Activity Logs
         </button>
+        <button
+          id="representativesTab"
+          className={tabClass('representatives')}
+          onClick={() => onNavigate('representatives')}
+        >
+          🧑‍💼 Representatives
+        </button>
       </div>
 
       <div className="nav-right">
@@ -110,6 +117,13 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Representatives state
+  const [representatives, setRepresentatives] = useState([]);
+  const [repEmail, setRepEmail] = useState('');
+  const [repNote, setRepNote] = useState('');
+  const [repLoading, setRepLoading] = useState(false);
+  const [repStatus, setRepStatus] = useState({ msg: '', type: '' });
+
   // User filters
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -128,17 +142,19 @@ const AdminDashboard = () => {
     setLoading(true);
     setError(null);
     try {
-      const [statsRes, usersRes, logsRes, productsRes] = await Promise.all([
+      const [statsRes, usersRes, logsRes, productsRes, repsRes] = await Promise.all([
         api.get('/admin/stats'),
         api.get('/admin/users'),
         api.get('/admin/logs'),
         api.get('/admin/products'),
+        api.get('/admin/representatives'),
       ]);
 
       setStats(statsRes.data);
       setUsers(usersRes.data);
       setLogs(logsRes.data);
       setProducts(productsRes.data);
+      setRepresentatives(repsRes.data);
     } catch (err) {
       console.error('Failed to load admin data:', err);
       setError(err.response?.data?.msg || err.message || 'Failed to load admin data');
@@ -207,6 +223,33 @@ const AdminDashboard = () => {
     } catch (err) {
       console.error('Failed to delete product:', err);
       alert(err.response?.data?.msg || 'Failed to delete product');
+    }
+  };
+
+  // Representative management
+  const handleAddRepresentative = async () => {
+    if (!repEmail.trim()) return;
+    setRepLoading(true);
+    setRepStatus({ msg: '', type: '' });
+    try {
+      const res = await api.post('/admin/representatives', { email: repEmail.trim(), note: repNote.trim() });
+      setRepresentatives((prev) => [res.data.representative, ...prev]);
+      setRepEmail('');
+      setRepNote('');
+      setRepStatus({ msg: '✅ Representative added successfully!', type: 'success' });
+    } catch (err) {
+      setRepStatus({ msg: err.response?.data?.msg || 'Failed to add representative', type: 'error' });
+    }
+    setRepLoading(false);
+  };
+
+  const handleDeleteRepresentative = async (repId, email) => {
+    if (!window.confirm(`Remove ${email} as a representative? They will no longer be redirected to the representative dashboard.`)) return;
+    try {
+      await api.delete(`/admin/representatives/${repId}`);
+      setRepresentatives((prev) => prev.filter((r) => r._id !== repId));
+    } catch (err) {
+      alert(err.response?.data?.msg || 'Failed to remove representative');
     }
   };
 
@@ -695,6 +738,158 @@ const AdminDashboard = () => {
             </table>
           </div>
         </section>
+        {/* ---------------- Representatives Section ---------------- */}
+        <section
+          id="representativesSection"
+          className={activeSection === 'representatives' ? 'section active' : 'section'}
+        >
+          <h2>🧑‍💼 Representative Access Management</h2>
+          <p style={{ color: '#64748b', marginBottom: '24px' }}>
+            Add email addresses here to grant representative access. When a user logs in with one of these emails, they will be automatically redirected to the Representative Dashboard regardless of their registered role.
+          </p>
+
+          {/* Add new representative */}
+          <div className="analytics-card" style={{ marginBottom: '28px' }}>
+            <h3 style={{ marginBottom: '16px' }}>➕ Add Representative Email</h3>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 240px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Email Address *</label>
+                <input
+                  type="email"
+                  placeholder="representative@example.com"
+                  value={repEmail}
+                  onChange={(e) => setRepEmail(e.target.value)}
+                  disabled={repLoading}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddRepresentative()}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #d1d5db',
+                    fontSize: '14px',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 200px' }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Note (optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Field representative – North Zone"
+                  value={repNote}
+                  onChange={(e) => setRepNote(e.target.value)}
+                  disabled={repLoading}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddRepresentative()}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1px solid #d1d5db',
+                    fontSize: '14px',
+                    outline: 'none',
+                  }}
+                />
+              </div>
+              <button
+                onClick={handleAddRepresentative}
+                disabled={repLoading || !repEmail.trim()}
+                style={{
+                  padding: '10px 22px',
+                  borderRadius: '8px',
+                  background: repLoading || !repEmail.trim() ? '#9ca3af' : '#10b981',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  border: 'none',
+                  cursor: repLoading || !repEmail.trim() ? 'not-allowed' : 'pointer',
+                  transition: 'background 0.2s',
+                  height: '42px',
+                  alignSelf: 'flex-end',
+                }}
+              >
+                {repLoading ? 'Adding...' : '➕ Add Representative'}
+              </button>
+            </div>
+
+            {repStatus.msg && (
+              <div style={{
+                marginTop: '14px',
+                padding: '10px 16px',
+                borderRadius: '8px',
+                background: repStatus.type === 'success' ? '#d1fae5' : '#fee2e2',
+                color: repStatus.type === 'success' ? '#065f46' : '#991b1b',
+                fontSize: '14px',
+                fontWeight: 500,
+              }}>
+                {repStatus.msg}
+              </div>
+            )}
+          </div>
+
+          {/* Representatives table */}
+          <div className="analytics-card">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3>Authorized Representatives ({representatives.length})</h3>
+              <button className="refresh-btn" onClick={handleRefresh}>🔄 Refresh</button>
+            </div>
+
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Email</th>
+                    <th>Note</th>
+                    <th>Added By</th>
+                    <th>Date Added</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {representatives.length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', color: '#6b7280', padding: '32px' }}>
+                        No representatives added yet. Use the form above to add one.
+                      </td>
+                    </tr>
+                  )}
+                  {representatives.map((rep, idx) => (
+                    <tr key={rep._id}>
+                      <td style={{ color: '#9ca3af' }}>{idx + 1}</td>
+                      <td>
+                        <strong>{rep.email}</strong>
+                      </td>
+                      <td style={{ color: '#6b7280', fontStyle: rep.note ? 'normal' : 'italic' }}>
+                        {rep.note || '—'}
+                      </td>
+                      <td>{rep.addedBy}</td>
+                      <td>{new Date(rep.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                      <td>
+                        <button
+                          className="action-btn delete"
+                          onClick={() => handleDeleteRepresentative(rep._id, rep.email)}
+                        >
+                          🗑️ Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div style={{
+            marginTop: '20px',
+            padding: '14px 18px',
+            background: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '10px',
+            fontSize: '13px',
+            color: '#1e40af',
+          }}>
+            <strong>ℹ️ How it works:</strong> When a user whose email is listed here logs in (via Google or OTP), the login page automatically checks this list and redirects them to <code>/representative</code> instead of their normal role dashboard. Removing an email immediately revokes representative redirect access on their next login.
+          </div>
+        </section>
+
       </main>
     </>
   );

@@ -8,6 +8,7 @@ import About from './pages/About';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import FarmerDashboard from './pages/FarmerDashboard';
+import RepresentativeDashboard from "./pages/RepresentativeDashboard";
 import DealerDashboard from './pages/DealerDashboard';
 import RetailerDashboard from './pages/RetailerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -30,6 +31,11 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={['farmer']} />}>
             <Route path="/farmer" element={<FarmerDashboard />} />
           </Route>
+
+          <Route
+            path="/representative"
+            element={<RepresentativeDashboard />}
+          />
 
           {/* Protected Dealer Route */}
           <Route element={<ProtectedRoute allowedRoles={['dealer']} />}>

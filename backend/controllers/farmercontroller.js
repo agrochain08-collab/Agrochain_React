@@ -1,6 +1,5 @@
 const User = require("../models/user");
 const Order = require("../models/order");
-const { cloudinary } = require("../config/cloudinary");
 
 // Generate unique receipt number
 function generateReceiptNumber() {
@@ -45,36 +44,20 @@ exports.addCrop = async (req, res, next) => {
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
 
     const {
-      productType,
-      varietySpecies,
-      harvestQuantity,
-      unitOfSale,
-      targetPrice,
-      availabilityStatus
+      productType, varietySpecies, harvestQuantity, unitOfSale,
+      targetPrice, availabilityStatus,
+      harvestDate, farmerVillage, additionalNotes
     } = req.body;
 
     if (!productType || !varietySpecies || !harvestQuantity || !unitOfSale || !targetPrice) {
       return res.status(400).json({ msg: "All fields are required" });
     }
-
     if (isNaN(harvestQuantity) || isNaN(targetPrice)) {
       return res.status(400).json({ msg: "Quantity and price must be valid numbers" });
     }
 
-    const imageFile = req.file;
-    if (!imageFile) {
-      return res.status(400).json({ msg: "Product image is required" });
-    }
-
-    let imageUrl = "";
-    try {
-      const uploadResult = await cloudinary.uploader.upload(imageFile.path);
-      imageUrl = uploadResult.secure_url;
-    } catch (err) {
-      const uploadError = new Error("Error uploading image to Cloudinary");
-      uploadError.originalError = err;
-      return next(uploadError); // Pass to error middleware
-    }
+    // Use a timestamp-based batchId — single submissions get their own unique batch
+    const batchId = `${farmer._id}-${Date.now()}`;
 
     const newCrop = {
       productType,
@@ -82,8 +65,14 @@ exports.addCrop = async (req, res, next) => {
       harvestQuantity: parseFloat(harvestQuantity),
       unitOfSale,
       targetPrice: parseFloat(targetPrice),
-      availabilityStatus: availabilityStatus,
-      imageUrl,
+      availabilityStatus: availabilityStatus || "",
+      harvestDate: harvestDate ? new Date(harvestDate) : undefined,
+      farmerVillage: farmerVillage || farmer.farmLocation || "",
+      additionalNotes: additionalNotes || "",
+      batchId,
+      imageUrl: "",
+      verificationStatus: "pending",
+      approvalStatus: "pending",
       dateAdded: new Date()
     };
 
@@ -91,13 +80,65 @@ exports.addCrop = async (req, res, next) => {
     farmer.crops.push(newCrop);
     await farmer.save();
 
-    res.json({
-      msg: "Product added successfully",
-      crop: newCrop
+    res.json({ msg: "Product submitted for verification", crop: newCrop });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ---------- Add Multiple Crops (bulk) — all get the SAME batchId ----------
+exports.addBulkCrops = async (req, res, next) => {
+  try {
+    const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
+    if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
+
+    const { crops, harvestDate, farmerVillage, additionalNotes } = req.body;
+    if (!Array.isArray(crops) || crops.length === 0) {
+      return res.status(400).json({ msg: "crops array is required" });
+    }
+
+    // ALL crops in this bulk submission share one batchId
+    const batchId = `${farmer._id}-${Date.now()}`;
+    const errors = [];
+    const newCrops = [];
+
+    crops.forEach((c, idx) => {
+      const { productType, varietySpecies, harvestQuantity, unitOfSale, targetPrice } = c;
+      if (!productType || !varietySpecies || !harvestQuantity || !unitOfSale || !targetPrice) {
+        errors.push(`Row ${idx + 1}: all fields required`);
+        return;
+      }
+      if (isNaN(harvestQuantity) || isNaN(targetPrice)) {
+        errors.push(`Row ${idx + 1}: quantity and price must be numbers`);
+        return;
+      }
+      newCrops.push({
+        productType,
+        varietySpecies,
+        harvestQuantity: parseFloat(harvestQuantity),
+        unitOfSale,
+        targetPrice: parseFloat(targetPrice),
+        availabilityStatus: c.availabilityStatus || "",
+        harvestDate: harvestDate ? new Date(harvestDate) : undefined,
+        farmerVillage: farmerVillage || farmer.farmLocation || "",
+        additionalNotes: additionalNotes || "",
+        batchId,
+        imageUrl: "",
+        verificationStatus: "pending",
+        approvalStatus: "pending",
+        dateAdded: new Date()
+      });
     });
 
+    if (errors.length > 0) return res.status(400).json({ msg: "Validation errors", errors });
+
+    if (!Array.isArray(farmer.crops)) farmer.crops = [];
+    farmer.crops.push(...newCrops);
+    await farmer.save();
+
+    res.json({ msg: `${newCrops.length} product(s) submitted for verification`, crops: newCrops, batchId });
   } catch (err) {
-    next(err); // Pass error to error middleware
+    next(err);
   }
 };
 
@@ -116,72 +157,91 @@ exports.getCrops = async (req, res, next) => {
   }
 };
 
-// ---------- Update Crop (FIXED: Now uses MongoDB _id) ----------
+// ---------- Update Crop ----------
 exports.updateCrop = async (req, res, next) => {
   try {
-    const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
-    if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
+    const farmer = await User.findOne({
+      email: req.params.email,
+      role: "farmer"
+    });
 
-    const cropId = req.params.id; // This is now a MongoDB ObjectId string
-    const cropIndex = farmer.crops.findIndex(c => c._id.toString() === cropId);
-    
-    if (cropIndex === -1) {
+    if (!farmer)
+      return res.status(404).json({ msg: "Farmer not found" });
+
+    const cropId = req.params.id;
+
+    const cropIndex = farmer.crops.findIndex(
+      c => c._id.toString() === cropId
+    );
+
+    if (cropIndex === -1)
       return res.status(404).json({ msg: "Product not found" });
+
+    // ✅ Declare ONLY ONCE
+    const crop = farmer.crops[cropIndex];
+
+    // Block edit if already claimed
+    const vs = crop.verificationStatus;
+    if (vs && vs !== "pending" && vs !== "rejected") {
+      return res.status(403).json({
+        msg: "Cannot edit — product already claimed for verification."
+      });
     }
 
-    const { 
-      productType, 
-      varietySpecies, 
-      harvestQuantity, 
-      unitOfSale, 
-      targetPrice, 
+    const {
+      productType,
+      varietySpecies,
+      harvestQuantity,
+      unitOfSale,
+      targetPrice,
       availabilityStatus
     } = req.body;
 
-    const crop = farmer.crops[cropIndex];
-    
     if (productType) crop.productType = productType;
     if (varietySpecies) crop.varietySpecies = varietySpecies;
-    if (harvestQuantity) crop.harvestQuantity = parseFloat(harvestQuantity);
+    if (harvestQuantity)
+      crop.harvestQuantity = parseFloat(harvestQuantity);
     if (unitOfSale) crop.unitOfSale = unitOfSale;
-    if (targetPrice) crop.targetPrice = parseFloat(targetPrice);
-    if (availabilityStatus) crop.availabilityStatus = availabilityStatus;
-
-    if (req.file) {
-      try {
-        const uploadResult = await cloudinary.uploader.upload(req.file.path);
-        crop.imageUrl = uploadResult.secure_url;
-      } catch (uploadErr) {
-        const error = new Error("Error uploading new image to Cloudinary");
-        error.originalError = uploadErr;
-        return next(error); // Pass to error middleware
-      }
-    }
+    if (targetPrice)
+      crop.targetPrice = parseFloat(targetPrice);
+    if (availabilityStatus)
+      crop.availabilityStatus = availabilityStatus;
 
     crop.lastUpdated = new Date();
+
     await farmer.save();
 
-    res.json({ 
-      msg: "Product updated successfully", 
-      crop 
+    res.json({
+      msg: "Product updated successfully",
+      crop
     });
-    
+
   } catch (err) {
-    next(err); // Pass error to error middleware
+    next(err);
   }
 };
 
-// ---------- Delete Crop (FIXED: Now uses MongoDB _id) ----------
+// ---------- Delete Crop ----------
 exports.deleteCrop = async (req, res, next) => {
   try {
     const farmer = await User.findOne({ email: req.params.email, role: "farmer" });
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
 
-    const cropId = req.params.id; // This is now a MongoDB ObjectId string
+    const cropId = req.params.id;
     const cropIndex = farmer.crops.findIndex(c => c._id.toString() === cropId);
     
     if (cropIndex === -1) {
       return res.status(404).json({ msg: "Product not found" });
+    }
+
+    // Block delete once claimed or approved — only allow on pending/rejected
+    const cropCheck = farmer.crops[cropIndex];
+    const vs = cropCheck.verificationStatus;
+    const isForce = req.query.force === 'true';
+    if (!isForce && vs && vs !== 'pending' && vs !== 'rejected') {
+      return res.status(403).json({ 
+        msg: "Cannot delete — this product is currently under verification or approved. Only pending or rejected products can be deleted." 
+      });
     }
 
     const crop = farmer.crops[cropIndex];
