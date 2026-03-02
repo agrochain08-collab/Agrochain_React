@@ -7,7 +7,7 @@ const RetailerOrder = require("../models/retailerOrder");
 // ===========================
 
 // Get Dealer Profile
-exports.getDealerProfile = async (req, res) => {
+exports.getDealerProfile = async (req, res, next) => {
   try {
     const dealer = await User.findOne({ email: req.params.email, role: "dealer" });
     if (!dealer) return res.status(404).json({ msg: "Dealer not found" });
@@ -18,7 +18,7 @@ exports.getDealerProfile = async (req, res) => {
 };
 
 // Update Dealer Profile
-exports.updateDealerProfile = async (req, res) => {
+exports.updateDealerProfile = async (req, res, next) => {
   try {
     const dealer = await User.findOneAndUpdate(
       { email: req.params.email, role: "dealer" },
@@ -32,14 +32,11 @@ exports.updateDealerProfile = async (req, res) => {
   }
 };
 
-// Add this near your other profile functions in dealercontroller.js
-
 exports.getFarmerProfileForDealer = async (req, res, next) => {
   try {
     const { farmerEmail } = req.params;
     
     const farmer = await User.findOne({ email: farmerEmail, role: "farmer" })
-      // Select only the fields the dealer needs to see (security best practice)
       .select('firstName lastName email mobile farmLocation'); 
 
     if (!farmer) return res.status(404).json({ msg: "Farmer not found" });
@@ -55,7 +52,7 @@ exports.getFarmerProfileForDealer = async (req, res, next) => {
 // ===========================
 
 // Add Vehicle
-exports.addVehicle = async (req, res) => {
+exports.addVehicle = async (req, res, next) => {
   try {
     const dealer = await User.findOne({ email: req.params.email, role: "dealer" });
     if (!dealer) return res.status(404).json({ msg: "Dealer not found" });
@@ -94,7 +91,7 @@ exports.addVehicle = async (req, res) => {
 };
 
 // Get All Vehicles for a Dealer
-exports.getVehicles = async (req, res) => {
+exports.getVehicles = async (req, res, next) => {
   try {
     const dealer = await User.findOne({ email: req.params.email, role: "dealer" });
     if (!dealer) return res.status(404).json({ msg: "Dealer not found" });
@@ -109,7 +106,7 @@ exports.getVehicles = async (req, res) => {
 };
 
 // Update Vehicle Status
-exports.updateVehicleStatus = async (req, res) => {
+exports.updateVehicleStatus = async (req, res, next) => {
   try {
     const { email, vehicleId } = req.params;
     const { currentStatus } = req.body;
@@ -139,7 +136,7 @@ exports.updateVehicleStatus = async (req, res) => {
 };
 
 // Delete Vehicle
-exports.deleteVehicle = async (req, res) => {
+exports.deleteVehicle = async (req, res, next) => {
   try {
     const { email, vehicleId } = req.params;
 
@@ -174,7 +171,7 @@ exports.deleteVehicle = async (req, res) => {
 // ===========================
 
 // Get All Available Products from All Farmers
-exports.getAllProducts = async (req, res) => {
+exports.getAllProducts = async (req, res, next) => {
   try {
     const farmers = await User.find({ 
       role: "farmer", 
@@ -211,15 +208,11 @@ exports.getAllProducts = async (req, res) => {
 // ===========================
 
 // Assign Vehicle to Product
-exports.assignVehicle = async (req, res) => {
+exports.assignVehicle = async (req, res, next) => {
   try {
-    console.log("=== VEHICLE ASSIGNMENT START ===");
-    console.log("Request body:", JSON.stringify(req.body, null, 2));
-    
     const { dealerEmail, productId, vehicleId, quantity, farmerEmail, tentativeDate } = req.body;
 
     if (!dealerEmail || !productId || !vehicleId || !quantity || !farmerEmail || !tentativeDate) {
-      console.log("Missing required fields");
       return res.status(400).json({ msg: "All fields are required" });
     }
 
@@ -306,7 +299,6 @@ exports.assignVehicle = async (req, res) => {
     const newOrder = new Order(orderData);
     await newOrder.save();
 
-    console.log("=== ASSIGNMENT SUCCESSFUL ===");
     res.json({ 
       msg: "Vehicle assigned successfully",
       orderId: newOrder._id,
@@ -315,17 +307,11 @@ exports.assignVehicle = async (req, res) => {
 
   } catch (err) {
     next(err);
-    
-    res.status(500).json({ 
-      msg: "Internal server error during vehicle assignment",
-      error: err.message,
-      success: false
-    });
   }
 };
 
 // Free Vehicle (make it available again)
-exports.freeVehicle = async (req, res) => {
+exports.freeVehicle = async (req, res, next) => {
   try {
     const { email, vehicleId } = req.params;
 
@@ -393,29 +379,20 @@ exports.freeVehicle = async (req, res) => {
 // ===========================
 
 // Place Bid on Order
-exports.placeBid = async (req, res) => {
+exports.placeBid = async (req, res, next) => {
   try {
-    console.log("=== PLACE BID START ===");
-    console.log("Request body:", req.body);
-    
     const { orderId, bidPrice } = req.body;
 
     if (!orderId || !bidPrice) {
-      console.log("Missing required fields");
       return res.status(400).json({ msg: "Order ID and bid price are required" });
     }
 
-    console.log("Finding order:", orderId);
     const order = await Order.findById(orderId);
     if (!order) {
-      console.log("Order not found");
       return res.status(404).json({ msg: "Order not found" });
     }
 
-    console.log("Order found:", order._id);
-
     if (parseFloat(bidPrice) <= 0) {
-      console.log("Invalid bid price");
       return res.status(400).json({ msg: "Bid price must be greater than 0" });
     }
 
@@ -425,12 +402,9 @@ exports.placeBid = async (req, res) => {
     order.status = 'Bid Placed';
     order.totalAmount = parseFloat(bidPrice) * order.quantity;
     
-    console.log("Saving order with bid...");
     await order.save();
-    console.log("Order saved successfully");
 
     // Notify farmer about the bid
-    console.log("Notifying farmer:", order.farmerEmail);
     const farmer = await User.findOne({ email: order.farmerEmail, role: "farmer" });
     if (farmer) {
       if (!farmer.notifications) farmer.notifications = [];
@@ -446,10 +420,8 @@ exports.placeBid = async (req, res) => {
         createdAt: new Date()
       });
       await farmer.save();
-      console.log("Farmer notified");
     }
 
-    console.log("=== BID PLACED SUCCESSFULLY ===");
     res.json({ 
       msg: "Bid placed successfully",
       order,
@@ -466,7 +438,7 @@ exports.placeBid = async (req, res) => {
 // ===========================
 
 // Get All Orders for a Dealer
-exports.getDealerOrders = async (req, res) => {
+exports.getDealerOrders = async (req, res, next) => {
   try {
     const orders = await Order.find({ dealerEmail: req.params.email })
       .sort({ assignedDate: -1 });
@@ -508,69 +480,13 @@ exports.getDealerOrders = async (req, res) => {
   }
 };
 
-// ===========================
-// PRODUCT REVIEW
-// ===========================
-
-// Submit Product Review
-exports.submitReview = async (req, res) => {
-  try {
-    const { productId, dealerEmail, quality, comments, rating } = req.body;
-
-    if (!productId || !dealerEmail || !quality || !comments || !rating) {
-      return res.status(400).json({ msg: "All fields are required" });
-    }
-
-    if (rating < 1 || rating > 5) {
-      return res.status(400).json({ msg: "Rating must be between 1 and 5" });
-    }
-
-    const farmer = await User.findOne({ 
-      role: "farmer",
-      "crops._id": productId 
-    });
-
-    if (!farmer) {
-      return res.status(404).json({ msg: "Product not found" });
-    }
-
-    const productIndex = farmer.crops.findIndex(c => c._id.toString() === productId.toString());
-    
-    if (productIndex === -1) {
-      return res.status(404).json({ msg: "Product not found" });
-    }
-
-    if (!farmer.crops[productIndex].reviews) {
-      farmer.crops[productIndex].reviews = [];
-    }
-
-    const newReview = {
-      dealerEmail,
-      quality,
-      comments,
-      rating: parseInt(rating),
-      date: new Date()
-    };
-
-    farmer.crops[productIndex].reviews.push(newReview);
-    await farmer.save();
-
-    res.json({ 
-      msg: "Review submitted successfully",
-      review: newReview
-    });
-
-  } catch (err) {
-     next(err);
-  }
-};
 
 // ===========================
 // INVENTORY MANAGEMENT (NEW)
 // ===========================
 
 // Update Inventory Price
-exports.updateInventoryPrice = async (req, res) => {
+exports.updateInventoryPrice = async (req, res, next) => {
   try {
     const { dealerEmail, inventoryId, newPrice } = req.body;
 
@@ -612,7 +528,7 @@ exports.updateInventoryPrice = async (req, res) => {
 };
 
 // Update Inventory Quantity
-exports.updateInventoryQuantity = async (req, res) => {
+exports.updateInventoryQuantity = async (req, res, next) => {
   try {
     const { dealerEmail, inventoryId, newQuantity } = req.body;
 
@@ -659,7 +575,7 @@ exports.updateInventoryQuantity = async (req, res) => {
 };
 
 // Remove Inventory Item
-exports.removeInventoryItem = async (req, res) => {
+exports.removeInventoryItem = async (req, res, next) => {
   try {
     const { dealerEmail, inventoryId } = req.body;
 
@@ -696,15 +612,12 @@ exports.removeInventoryItem = async (req, res) => {
 // RETAILER ORDERS (for Dealer)
 // ===========================
 
-exports.getRetailerOrders = async (req, res) => {
+exports.getRetailerOrders = async (req, res, next) => {
   try {
     const dealerEmail = req.params.email;
-    console.log("📥 Fetching retailer orders for dealer:", dealerEmail);
     
     const orders = await RetailerOrder.find({ "dealerInfo.email": dealerEmail })
                                       .sort({ createdAt: -1 });
-    
-    console.log(`✅ Found ${orders.length} orders for dealer ${dealerEmail}`);
     
     if (orders.length === 0) {
       return res.json([]);

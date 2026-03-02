@@ -135,11 +135,10 @@ const DealerDashboard = () => {
     const [modal, setModal] = useState({ 
         farmer: false, 
         assignVehicle: false, 
-        review: false, 
         bid: false, 
         receipt: false, 
         viewReviews: false, // Used in inventory for Retailer reviews
-        qualityReport: false, // New Modal for Product Quality Report
+        qualityReport: false, 
         editProfile: false,
         retailerReceipt: false 
     });
@@ -147,7 +146,6 @@ const DealerDashboard = () => {
     
     // Forms
     const [vehicleFormData, setVehicleFormData] = useState({ vehicleId: '', vehicleType: '', temperatureCapacity: '' });
-    const [reviewData, setReviewData] = useState({ quality: '', comments: '', rating: 1 });
     const [bidPrice, setBidPrice] = useState(0);
 
     // --- Core Data Fetching ---
@@ -193,8 +191,6 @@ const DealerDashboard = () => {
                 setOrders(prevOrders => {
                     let hasChanges = false;
                     const updatedOrders = prevOrders.map(localOrder => {
-                        // FIX: Only match if the local order has been officially assigned a server ID.
-                        // This prevents new local orders from snapping to old completed orders of the same product.
                         const serverOrder = localOrder.serverOrderId 
                             ? serverOrders.find(so => so._id === localOrder.serverOrderId)
                             : null;
@@ -299,7 +295,6 @@ const DealerDashboard = () => {
             ...item, 
             orderId: `local-${Date.now()}-${Math.random()}`, 
             vehicleAssigned: false, 
-            reviewSubmitted: false, 
             bidPlaced: false, 
             bidStatus: 'Pending Vehicle' 
         }]);
@@ -335,7 +330,6 @@ const DealerDashboard = () => {
     // Modal & Business Logic
     const openModal = (name, data) => { 
         setSelectedData(data); 
-        if(name === 'review') setReviewData({ quality: '', comments: '', rating: 1 });
         if(name === 'bid') setBidPrice(0);
         setModal({ ...modal, [name]: true }); 
     };
@@ -362,22 +356,6 @@ const DealerDashboard = () => {
             loadAllData();
             alert("Vehicle Assigned!");
         } catch (err) { alert(err.response?.data?.msg || "Error"); }
-    };
-
-    const handleSubmitReview = async (e) => {
-        e.preventDefault();
-        try {
-            await api.post('/dealer/submit-review', {
-                productId: selectedData._id,
-                dealerEmail: user.email,
-                ...reviewData,
-                rating: parseInt(reviewData.rating)
-            });
-            setOrders(prev => prev.map(o => o.orderId === selectedData.orderId ? { ...o, reviewSubmitted: true } : o));
-            closeModal('review');
-            loadAllData();
-            alert("Review Submitted!");
-        } catch (err) { alert("Error submitting review"); }
     };
 
     const handlePlaceBid = async (e) => {
@@ -533,7 +511,7 @@ const DealerDashboard = () => {
                         <div className="orders-grid">
                             {orders.length === 0 ? <div className="empty-state"><h3>No orders yet.</h3></div> :
                             orders.map(order => (
-                                <FarmerOrderCard key={order.orderId} item={order} onAssignVehicle={openModal} onPlaceBid={openModal} onAddReview={openModal} onViewReceipt={openModal} />
+                                <FarmerOrderCard key={order.orderId} item={order} onAssignVehicle={openModal} onPlaceBid={openModal} onViewReceipt={openModal} />
                             ))}
                         </div>
                     </section>
@@ -640,7 +618,6 @@ const DealerDashboard = () => {
             {/* --- MODALS --- */}
             <FarmerModal show={modal.farmer} onClose={() => closeModal('farmer')} farmerEmail={selectedData?.farmerEmail} />
             <AssignVehicleModal show={modal.assignVehicle} onClose={() => closeModal('assignVehicle')} onSubmit={handleAssignVehicle} vehicles={allVehicles.filter(v => v.currentStatus === 'AVAILABLE')} />
-            <ReviewModal show={modal.review} onClose={() => closeModal('review')} onSubmit={handleSubmitReview} data={reviewData} setData={setReviewData} productName={selectedData?.varietySpecies} />
             <BidModal show={modal.bid} onClose={() => closeModal('bid')} onSubmit={handlePlaceBid} setBidPrice={setBidPrice} order={selectedData} />
             <ReceiptModal show={modal.receipt} onClose={() => closeModal('receipt')} order={selectedData} user={profile} />
             <ViewReviewsModal show={modal.viewReviews} onClose={() => closeModal('viewReviews')} product={selectedData} />
@@ -853,10 +830,9 @@ const RetailerReceiptModal = ({ show, onClose, order, dealer }) => {
     );
 };
 
-const FarmerOrderCard = ({ item, onAssignVehicle, onPlaceBid, onAddReview, onViewReceipt }) => {
+const FarmerOrderCard = ({ item, onAssignVehicle, onPlaceBid, onViewReceipt }) => {
     let statusBadge = null;
     let action = null;
-    const skipReview = item.quantity >= item.originalHarvestQuantity;
 
     if (item.bidStatus === 'Accepted') {
         statusBadge = <span className="status-badge success">✓ Accepted</span>;
@@ -871,19 +847,11 @@ const FarmerOrderCard = ({ item, onAssignVehicle, onPlaceBid, onAddReview, onVie
         statusBadge = <span className="status-badge warning">⏳ Bid Pending</span>;
     } else if (item.vehicleAssigned) {
         statusBadge = <span className="status-badge info">🚚 Vehicle Assigned</span>;
-        if (!item.reviewSubmitted && !skipReview) {
-             action = (
-                <button className="btn-action secondary" onClick={() => onAddReview('review', item)}>
-                    ⭐ Write Review
-                </button>
-             );
-        } else {
-             action = (
-                <button className="btn-action primary" onClick={() => onPlaceBid('bid', item)}>
-                    💰 Place Bid
-                </button>
-             );
-        }
+        action = (
+            <button className="btn-action primary" onClick={() => onPlaceBid('bid', item)}>
+                💰 Place Bid
+            </button>
+        );
     } else {
         statusBadge = <span className="status-badge danger">⚠️ Action Needed</span>;
         action = (
@@ -1055,31 +1023,6 @@ const AssignVehicleModal = ({ show, onClose, onSubmit, vehicles }) => {
                     <label>Tentative Date</label>
                     <input type="date" id="tentativeDate" required style={{width:'100%', padding:'10px', margin:'10px 0'}} />
                     <button className="btn-primary" type="submit" style={{width:'100%'}}>Assign</button>
-                </form>
-            </div>
-        </div>
-    );
-};
-
-const ReviewModal = ({ show, onClose, onSubmit, data, setData, productName }) => {
-    if (!show) return null;
-    return (
-        <div className="modal" style={{display:'block'}} onClick={onClose}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-                <span className="close" onClick={onClose}>&times;</span>
-                <h3>Review: {productName}</h3>
-                <form onSubmit={onSubmit}>
-                    <select value={data.quality} onChange={e => setData({...data, quality: e.target.value})} required style={{width:'100%', padding:'10px', margin:'10px 0'}}>
-                        <option value="">Quality</option>
-                        <option value="Excellent">Excellent</option>
-                        <option value="Good">Good</option>
-                        <option value="Average">Average</option>
-                        <option value="Poor">Poor</option>
-                    </select>
-                    <textarea value={data.comments} onChange={e => setData({...data, comments: e.target.value})} placeholder="Comments" required style={{width:'100%', padding:'10px', margin:'10px 0'}} />
-                    <label>Rating: {data.rating}</label>
-                    <input type="range" min="1" max="5" value={data.rating} onChange={e => setData({...data, rating: e.target.value})} style={{width:'100%'}} />
-                    <button className="btn-primary" type="submit" style={{width:'100%', marginTop:'10px'}}>Submit</button>
                 </form>
             </div>
         </div>

@@ -12,7 +12,6 @@ const {
   getAllProducts,
   assignVehicle,
   getDealerOrders,
-  submitReview,
   placeBid,
   freeVehicle,
   getRetailerOrders,
@@ -47,11 +46,6 @@ router.get("/all-products",protect,authorize('dealer'), getAllProducts);
 // ===========================
 router.post("/assign-vehicle",protect,authorize('dealer'), assignVehicle);
 router.get("/orders/:email",protect, authorize('dealer'),getDealerOrders);
-
-// ===========================
-// REVIEW ROUTES
-// ===========================
-router.post("/submit-review",protect,authorize('dealer'), submitReview);
 
 // ===========================
 // BIDDING ROUTES
