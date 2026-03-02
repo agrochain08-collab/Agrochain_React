@@ -138,7 +138,8 @@ const DealerDashboard = () => {
         review: false, 
         bid: false, 
         receipt: false, 
-        viewReviews: false,
+        viewReviews: false, // Used in inventory for Retailer reviews
+        qualityReport: false, // New Modal for Product Quality Report
         editProfile: false,
         retailerReceipt: false 
     });
@@ -490,7 +491,15 @@ const DealerDashboard = () => {
                         <div className="products-grid">
                             {getFilteredProducts().length === 0 ? <div className="empty-state"><h3>No products found.</h3></div> :
                             getFilteredProducts().map(p => (
-                                <ProductCard key={p._id} product={p} onAddToCart={handleAddToCart} onQtyChange={handleQtyChange} onViewFarmer={openModal} onViewReviews={openModal} qty={productQuantities[p._id] || ''} />
+                                <ProductCard 
+                                    key={p._id} 
+                                    product={p} 
+                                    onAddToCart={handleAddToCart} 
+                                    onQtyChange={handleQtyChange} 
+                                    onViewFarmer={openModal} 
+                                    onViewQualityReport={openModal} 
+                                    qty={productQuantities[p._id] || ''} 
+                                />
                             ))}
                         </div>
                     </section>
@@ -637,13 +646,14 @@ const DealerDashboard = () => {
             <ViewReviewsModal show={modal.viewReviews} onClose={() => closeModal('viewReviews')} product={selectedData} />
             <EditProfileModal show={modal.editProfile} onClose={() => closeModal('editProfile')} profileData={profile} onSave={handleProfileUpdate} />
             <RetailerReceiptModal show={modal.retailerReceipt} onClose={() => closeModal('retailerReceipt')} order={selectedData} dealer={profile} />
+            <QualityReportModal show={modal.qualityReport} onClose={() => closeModal('qualityReport')} product={selectedData} />
         </>
     );
 };
 
 // --- SUB COMPONENTS ---
 
-const ProductCard = ({ product, onAddToCart, qty, onQtyChange, onViewFarmer, onViewReviews }) => (
+const ProductCard = ({ product, onAddToCart, qty, onQtyChange, onViewFarmer, onViewQualityReport }) => (
     <div className="modern-card product-card">
         <img src={product.imageUrl} alt={product.varietySpecies} />
         <div className="card-body">
@@ -653,18 +663,31 @@ const ProductCard = ({ product, onAddToCart, qty, onQtyChange, onViewFarmer, onV
             </div>
             <h3>{product.varietySpecies}</h3>
             <p className="price">₹{product.targetPrice} <small>/ {product.unitOfSale}</small></p>
-            {product.reviews && product.reviews.length > 0 && (
-                <div style={{fontSize:'0.85em', color:'#666', marginBottom:'10px'}}>
-                    ⭐ {product.reviews.length} Review(s)
-                    <button className="btn-text" style={{fontSize:'0.9em', marginLeft:'5px'}} onClick={() => onViewReviews('viewReviews', product)}>View</button>
-                </div>
-            )}
-            <div className="card-actions">
-                <button className="btn-text" onClick={() => onViewFarmer('farmer', product)}>View Farmer</button>
-                <div className="action-group">
-                    <input type="number" value={qty} onChange={(e) => onQtyChange(product._id, e.target.value)} placeholder="Qty" style={{width:'60px'}} />
-                    <button className="btn-icon" onClick={() => onAddToCart(product)}>🛒Add to cart</button>
-                </div>
+
+            {/* Row 1: View Farmer + Quality Report (same line) */}
+            <div className="card-action-row info-row">
+                <button className="btn-view-farmer" onClick={() => onViewFarmer('farmer', product)}>
+                    👨‍🌾 View Farmer
+                </button>
+                {product.qualityReport && product.qualityReport.grade && (
+                    <button className="btn-view-reviews" onClick={() => onViewQualityReport('qualityReport', product)} style={{background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0'}}>
+                        📋 Quality Report
+                    </button>
+                )}
+            </div>
+
+            {/* Row 2: Qty + Add to Cart */}
+            <div className="card-action-row cart-row">
+                <input
+                    type="number"
+                    value={qty}
+                    onChange={(e) => onQtyChange(product._id, e.target.value)}
+                    placeholder="Qty"
+                    className="qty-input"
+                />
+                <button className="btn-add-cart" onClick={() => onAddToCart(product)}>
+                    🛒 Add to Cart
+                </button>
             </div>
         </div>
     </div>
@@ -1105,6 +1128,64 @@ const ViewReviewsModal = ({ show, onClose, product }) => {
                             </div>
                         ))
                     )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- NEW QUALITY REPORT MODAL ---
+const QualityReportModal = ({ show, onClose, product }) => {
+    if (!show || !product || !product.qualityReport) return null;
+    const { grade, pesticidesUsed, storageCondition, harvestCondition, verifiedQuantity, remarks, inspectedBy, inspectedAt } = product.qualityReport;
+
+    const gradeColor = grade === 'A' ? '#10b981' : grade === 'B' ? '#3b82f6' : grade === 'C' ? '#f59e0b' : '#ef4444';
+
+    return (
+        <div className="modal" style={{display:'block', zIndex: 3000}} onClick={onClose}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '500px'}}>
+                <span className="close" onClick={onClose}>&times;</span>
+                <h3 style={{marginBottom: '5px'}}>📋 Quality Report</h3>
+                <p style={{color: '#6b7280', fontSize: '0.9rem', marginBottom: '15px'}}>For: {product.varietySpecies}</p>
+                
+                <div style={{ background: '#f9fafb', borderRadius: '8px', padding: '16px', border:'1px solid #e5e7eb', marginTop: '15px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px', marginBottom: '12px' }}>
+                        <div>
+                            <span style={{display: 'block', color: '#6b7280', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Assigned Grade</span>
+                            <span style={{fontSize: '24px', fontWeight: 'bold', color: gradeColor}}>{grade || 'N/A'}</span>
+                        </div>
+                        <div style={{textAlign: 'right'}}>
+                            <span style={{display: 'block', color: '#6b7280', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Verified Quantity</span>
+                            <span style={{fontSize: '18px', fontWeight: '600', color: '#374151'}}>
+                                {verifiedQuantity ? `${verifiedQuantity} ${product.unitOfSale}` : 'N/A'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '14px', color: '#4b5563' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr' }}>
+                            <strong>Pesticides:</strong> <span>{pesticidesUsed || 'Not specified'}</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr' }}>
+                            <strong>Storage:</strong> <span>{storageCondition || 'Not specified'}</span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr' }}>
+                            <strong>Harvest:</strong> <span>{harvestCondition || 'Not specified'}</span>
+                        </div>
+                        {remarks && (
+                            <div style={{ marginTop: '5px' }}>
+                                <strong>Inspector Remarks:</strong>
+                                <p style={{ margin: '5px 0 0 0', padding: '10px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '4px', fontStyle: 'italic', lineHeight: '1.4' }}>
+                                    {remarks}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    <div style={{ marginTop: '15px', paddingTop: '10px', fontSize: '12px', color: '#9ca3af', display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Inspector: {inspectedBy || 'N/A'}</span>
+                        <span>Date: {inspectedAt ? new Date(inspectedAt).toLocaleDateString() : 'N/A'}</span>
+                    </div>
                 </div>
             </div>
         </div>
