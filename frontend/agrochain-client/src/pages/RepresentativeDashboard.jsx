@@ -200,66 +200,6 @@ const RejectModal = ({crop,onClose,onDone}) => {
   );
 };
 
-// ── SAVE NOTES MODAL ──────────────────────────────────────────────────────────
-const EditVerifModal = ({crop,onClose,onDone}) => {
-  const [form,setForm]=useState({
-    verifiedQuantity:crop.qualityReport?.verifiedQuantity||crop.harvestQuantity||'',
-    harvestCondition:crop.qualityReport?.harvestCondition||'',
-    pesticidesUsed:crop.qualityReport?.pesticidesUsed||'',
-    storageCondition:crop.qualityReport?.storageCondition||'',
-    remarks:crop.qualityReport?.remarks||'',
-  });
-  const [loading,setLoading]=useState(false); const [error,setError]=useState('');
-  const sf=(k,v)=>setForm(p=>({...p,[k]:v}));
-
-  const submit=async e=>{
-    e.preventDefault();setLoading(true);setError('');
-    try{await api.put(`/representative/edit/${crop.farmer.email}/${crop.cropId}`,form);onDone();onClose();}
-    catch(err){setError(err.response?.data?.msg||'Failed');}
-    finally{setLoading(false);}
-  };
-
-  return (
-    <Overlay onClose={onClose} maxW="520px">
-      <MHead title="📝 Save Field Notes" onClose={onClose} color={C.blue}/>
-      <CropBanner crop={crop}/>
-      <form onSubmit={submit}>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'12px'}}>
-          <div>
-            <label style={L_STYLE}>Verified Quantity</label>
-            <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-              <input type="number" value={form.verifiedQuantity} onChange={e=>sf('verifiedQuantity',e.target.value)} style={{...I_STYLE,flex:1}}/>
-              <span style={{color:C.grayMid,fontSize:'13px'}}>{crop.unitOfSale}</span>
-            </div>
-          </div>
-          <div>
-            <label style={L_STYLE}>Harvest Condition</label>
-            <input type="text" value={form.harvestCondition} onChange={e=>sf('harvestCondition',e.target.value)} placeholder="Fresh / Good / Fair" style={I_STYLE}/>
-          </div>
-          <div>
-            <label style={L_STYLE}>Pesticides Used</label>
-            <input type="text" value={form.pesticidesUsed} onChange={e=>sf('pesticidesUsed',e.target.value)} placeholder="None / Details..." style={I_STYLE}/>
-          </div>
-          <div>
-            <label style={L_STYLE}>Storage Condition</label>
-            <input type="text" value={form.storageCondition} onChange={e=>sf('storageCondition',e.target.value)} placeholder="Dry / Cold / Ambient" style={I_STYLE}/>
-          </div>
-        </div>
-        <div style={{marginBottom:'16px'}}>
-          <label style={L_STYLE}>Field Notes / Remarks</label>
-          <textarea value={form.remarks} onChange={e=>sf('remarks',e.target.value)} rows={3} placeholder="Observations from on-field visit..." style={{...I_STYLE,resize:'vertical'}}/>
-        </div>
-        {error&&<Err msg={error}/>}
-        <div style={{display:'flex',gap:'10px'}}>
-          <button type="submit" disabled={loading} style={{flex:1,padding:'11px',background:loading?C.grayMid:C.blueMid,color:'#fff',border:'none',borderRadius:'10px',fontWeight:700,cursor:loading?'not-allowed':'pointer'}}>
-            {loading?'Saving...':'💾 Save Notes'}
-          </button>
-          <button type="button" onClick={onClose} style={{padding:'11px 20px',background:'#f3f4f6',color:C.gray,border:'none',borderRadius:'10px',fontWeight:600,cursor:'pointer'}}>Cancel</button>
-        </div>
-      </form>
-    </Overlay>
-  );
-};
 
 // ── POST-APPROVAL EDIT MODAL ──────────────────────────────────────────────────
 const PostApprovalModal = ({crop,onClose,onDone}) => {
@@ -357,10 +297,9 @@ const BatchCard = ({batch,onRefresh}) => {
 };
 
 // ── ASSIGNED BATCH CARD (My Verifications) ────────────────────────────────────
-const AssignedCard = ({batch,onRefresh}) => {
+const AssignedCard = ({batch,onRefresh,onModalChange}) => {
   const [approveModal,setApproveModal]=useState(null);
   const [rejectModal,setRejectModal]=useState(null);
-  const [editModal,setEditModal]=useState(null);
   const [unclaiming,setUnclaiming]=useState(false);
 
   const unclaim=async()=>{
@@ -402,9 +341,8 @@ const AssignedCard = ({batch,onRefresh}) => {
             {crop.qualityReport?.remarks&&<div style={{gridColumn:'1/-1'}}><span style={{color:C.grayMid,fontSize:'11px'}}>Notes</span><div style={{fontSize:'13px',color:C.gray,fontStyle:'italic'}}>{crop.qualityReport.remarks}</div></div>}
           </div>
           <div style={{padding:'10px 14px',borderTop:`1px solid ${C.border}`,display:'flex',gap:'8px',flexWrap:'wrap'}}>
-            <button onClick={()=>setEditModal(crop)} style={{padding:'7px 14px',background:C.blueLight,color:C.blue,border:`1px solid ${C.blueMid}`,borderRadius:'8px',fontWeight:600,cursor:'pointer',fontSize:'12px'}}>📝 Save Notes</button>
-            <button onClick={()=>setApproveModal(crop)} style={{padding:'7px 14px',background:C.greenLight,color:C.green,border:`1px solid ${C.greenMid}`,borderRadius:'8px',fontWeight:600,cursor:'pointer',fontSize:'12px'}}>✅ Approve</button>
-            <button onClick={()=>setRejectModal(crop)} style={{padding:'7px 14px',background:C.redLight,color:C.red,border:`1px solid ${C.redMid}`,borderRadius:'8px',fontWeight:600,cursor:'pointer',fontSize:'12px'}}>❌ Reject</button>
+            <button onClick={()=>{setApproveModal(crop);onModalChange&&onModalChange(true);}} style={{padding:'7px 14px',background:C.greenLight,color:C.green,border:`1px solid ${C.greenMid}`,borderRadius:'8px',fontWeight:600,cursor:'pointer',fontSize:'12px'}}>✅ Approve</button>
+            <button onClick={()=>{setRejectModal(crop);onModalChange&&onModalChange(true);}} style={{padding:'7px 14px',background:C.redLight,color:C.red,border:`1px solid ${C.redMid}`,borderRadius:'8px',fontWeight:600,cursor:'pointer',fontSize:'12px'}}>❌ Reject</button>
           </div>
         </div>
       ))}
@@ -413,9 +351,8 @@ const AssignedCard = ({batch,onRefresh}) => {
         {unclaiming?'Releasing...':'↩ Release Back to Queue'}
       </button>
 
-      {approveModal&&<ApproveModal crop={approveModal} onClose={()=>setApproveModal(null)} onDone={onRefresh}/>}
-      {rejectModal&&<RejectModal crop={rejectModal} onClose={()=>setRejectModal(null)} onDone={onRefresh}/>}
-      {editModal&&<EditVerifModal crop={editModal} onClose={()=>setEditModal(null)} onDone={onRefresh}/>}
+      {approveModal&&<ApproveModal crop={approveModal} onClose={()=>{setApproveModal(null);onModalChange&&onModalChange(false);}} onDone={()=>{onRefresh();onModalChange&&onModalChange(false);}}/>}
+      {rejectModal&&<RejectModal crop={rejectModal} onClose={()=>{setRejectModal(null);onModalChange&&onModalChange(false);}} onDone={()=>{onRefresh();onModalChange&&onModalChange(false);}}/>}
     </div>
   );
 };
@@ -470,6 +407,7 @@ const RepresentativeDashboard = () => {
   const [alerts,setAlerts]=useState([]);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState('');
+  const [anyModalOpen,setAnyModalOpen]=useState(false); // pause auto-refresh when modal open
 
   const load=useCallback(async()=>{
     setLoading(true);setError('');
@@ -487,7 +425,10 @@ const RepresentativeDashboard = () => {
   },[]);
 
   useEffect(()=>{load();},[load]);
-  useEffect(()=>{const id=setInterval(load,30000);return()=>clearInterval(id);},[load]);
+  useEffect(()=>{
+    const id=setInterval(()=>{ if(!anyModalOpen) load(); },30000);
+    return()=>clearInterval(id);
+  },[load,anyModalOpen]);
 
   const signout=()=>{if(window.confirm('Sign out?')){logout();navigate('/login');}};
 
@@ -567,7 +508,7 @@ const RepresentativeDashboard = () => {
             </div>
             {mine.length===0?<EmptyState icon="📋" title="No active verifications" subtitle="Claim a request from the queue to get started."/>
               :<div style={{display:'flex',flexDirection:'column',gap:'16px'}}>
-                {mine.map(b=><AssignedCard key={b.batchId} batch={b} onRefresh={load}/>)}
+                {mine.map(b=><AssignedCard key={b.batchId} batch={b} onRefresh={load} onModalChange={setAnyModalOpen}/>)}
               </div>}
           </>
         )}
