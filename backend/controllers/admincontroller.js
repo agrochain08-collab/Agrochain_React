@@ -13,6 +13,7 @@ exports.getStats = async (req, res) => {
     const farmers = await User.countDocuments({ role: "farmer" });
     const dealers = await User.countDocuments({ role: "dealer" });
     const retailers = await User.countDocuments({ role: "retailer" });
+    const totalUsers = farmers + dealers + retailers;
 
     // Compute total products from farmer crops
     const allFarmers = await User.find({ role: "farmer" });
@@ -24,52 +25,45 @@ exports.getStats = async (req, res) => {
     // Compute orders and revenue
     let orders = 0;
     let totalAmount = 0;
-    
+    let farmerDealerOrderCount = 0;
+
     try {
-      // Count both Order and RetailerOrder
-      const farmerDealerOrders = await Order.countDocuments();
+      farmerDealerOrderCount = await Order.countDocuments();
       const dealerRetailerOrders = await RetailerOrder.countDocuments();
-      orders = farmerDealerOrders + dealerRetailerOrders;
-      
-      // Calculate total transaction amount
+      orders = farmerDealerOrderCount + dealerRetailerOrders;
+
       const orderSum = await Order.aggregate([
         { $group: { _id: null, total: { $sum: "$totalAmount" } } }
       ]);
-      
       const retailerOrderSum = await RetailerOrder.aggregate([
         { $group: { _id: null, total: { $sum: "$totalAmount" } } }
       ]);
-      
       totalAmount = (orderSum[0]?.total || 0) + (retailerOrderSum[0]?.total || 0);
     } catch (err) {
       console.error("Error calculating orders:", err);
-      orders = 0;
-      totalAmount = 0;
     }
 
     // Additional analytics
-    const activeUsers = farmers + dealers + retailers;
-    
-    // Get pending orders (orders with Pending bid status or vehicle assigned)
+    const activeUsers = totalUsers;
+
+    // Pending orders
     let pendingOrders = 0;
     try {
-      pendingOrders = await Order.countDocuments({ 
-        status: { $in: ['Vehicle Assigned', 'Bid Placed'] } 
+      pendingOrders = await Order.countDocuments({
+        status: { $in: ['Vehicle Assigned', 'Bid Placed'] }
       });
-      
       const pendingRetailerOrders = await RetailerOrder.countDocuments({
         'paymentDetails.status': 'Pending'
       });
-      
       pendingOrders += pendingRetailerOrders;
     } catch (err) {
       console.error("Error counting pending orders:", err);
     }
 
-    // Get completed orders
+    // Completed orders
     let completedOrders = 0;
     try {
-      completedOrders = await Order.countDocuments({ status: 'Bid Accepted' });
+      completedOrders = await Order.countDocuments({ status: { $in: ['Completed', 'Bid Accepted', 'Delivered'] } });
       const completedRetailerOrders = await RetailerOrder.countDocuments({
         'paymentDetails.status': 'Completed'
       });
@@ -78,16 +72,100 @@ exports.getStats = async (req, res) => {
       console.error("Error counting completed orders:", err);
     }
 
-    // Monthly revenue data (last 6 months)
+    // =====================
+    // FINANCIAL & ORDER INSIGHTS
+    // =====================
+
+    // Average Order Value
+    const avgOrderValue = orders > 0 ? Math.round(totalAmount / orders) : 0;
+
+    // Bid Acceptance Rate
+    let bidAccepted = 0, bidRejected = 0;
+    try {
+      bidAccepted = await Order.countDocuments({ bidStatus: 'Accepted' });
+      bidRejected = await Order.countDocuments({ bidStatus: 'Rejected' });
+    } catch (err) { console.error("Error counting bid stats:", err); }
+    const totalBids = bidAccepted + bidRejected;
+    const bidAcceptanceRate = totalBids > 0 ? Math.round((bidAccepted / totalBids) * 100) : 0;
+
+    // Payment Pending Value
+    let paymentPendingValue = 0;
+    try {
+      const pendingPaySum = await Order.aggregate([
+        { $match: { paymentStatus: 'Pending' } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } }
+      ]);
+      paymentPendingValue = pendingPaySum[0]?.total || 0;
+    } catch (err) { console.error("Error fetching pending payment value:", err); }
+
+    // Orders In Transit
+    let inTransitOrders = 0;
+    try {
+      inTransitOrders = await Order.countDocuments({ status: 'In Transit' });
+    } catch (err) { console.error("Error counting in-transit orders:", err); }
+
+    // Cancelled Orders
+    let cancelledOrders = 0;
+    try {
+      cancelledOrders = await Order.countDocuments({ status: 'Cancelled' });
+    } catch (err) { console.error("Error counting cancelled orders:", err); }
+    const cancelledRate = farmerDealerOrderCount > 0
+      ? Math.round((cancelledOrders / farmerDealerOrderCount) * 100)
+      : 0;
+
+    // =====================
+    // USER GROWTH & HEALTH
+    // =====================
+    const now = new Date();
+
+    // New registrations today
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    let newUsersToday = 0;
+    try {
+      newUsersToday = await User.countDocuments({ createdAt: { $gte: todayStart } });
+    } catch (err) { console.error("Error counting today's users:", err); }
+
+    // New registrations this week
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - 7);
+    let newUsersThisWeek = 0;
+    try {
+      newUsersThisWeek = await User.countDocuments({ createdAt: { $gte: weekStart } });
+    } catch (err) { console.error("Error counting week's users:", err); }
+
+    // Inactive users
+    let inactiveUsers = 0;
+    try {
+      inactiveUsers = await User.countDocuments({ isActive: false });
+    } catch (err) { console.error("Error counting inactive users:", err); }
+
+    // Email verification rate
+    let verifiedEmailUsers = 0;
+    try {
+      verifiedEmailUsers = await User.countDocuments({ emailVerified: true });
+    } catch (err) { console.error("Error counting verified users:", err); }
+    const emailVerificationRate = totalUsers > 0
+      ? Math.round((verifiedEmailUsers / totalUsers) * 100)
+      : 0;
+
+    // Google Auth users
+    let googleAuthUsers = 0;
+    try {
+      googleAuthUsers = await User.countDocuments({ googleAuth: true });
+    } catch (err) { console.error("Error counting google auth users:", err); }
+
+    // Monthly revenue (last 6 months)
     const monthlyRevenue = await getMonthlyRevenue();
-    
+
     // Orders by status
     const ordersByStatus = await getOrdersByStatus();
-    
-    // Top products by category
+
+    // Top products
     const topProducts = await getTopProducts(allFarmers);
 
     res.json({
+      // Core stats
       farmers,
       dealers,
       retailers,
@@ -99,7 +177,24 @@ exports.getStats = async (req, res) => {
       completedOrders,
       monthlyRevenue,
       ordersByStatus,
-      topProducts
+      topProducts,
+      // Financial & Order Insights
+      avgOrderValue,
+      bidAcceptanceRate,
+      bidAccepted,
+      bidRejected,
+      paymentPendingValue,
+      inTransitOrders,
+      cancelledOrders,
+      cancelledRate,
+      // User Growth & Health
+      totalUsers,
+      newUsersToday,
+      newUsersThisWeek,
+      inactiveUsers,
+      emailVerificationRate,
+      verifiedEmailUsers,
+      googleAuthUsers,
     });
   } catch (err) {
     console.error("Error fetching analytics:", err);
