@@ -1,34 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import api from '../services/api';
 import '../assets/css/admin.css';
 import { useNavigate } from 'react-router-dom';
-import {
-  Chart as ChartJS,
-  ArcElement,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-} from 'chart.js';
-import { Pie, Line, Bar } from 'react-chartjs-2';
-
-// Register Chart.js components
-ChartJS.register(
-  ArcElement,
-  Tooltip,
-  Legend,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title
-);
 
 // ---------- Admin Navbar ----------
 const AdminNavbar = ({ onSignout, onNavigate, activeSection }) => {
@@ -50,7 +24,6 @@ const AdminNavbar = ({ onSignout, onNavigate, activeSection }) => {
 
       <div className="nav-center">
         <button
-          id="analyticsTab"
           className={tabClass('analytics')}
           onClick={() => onNavigate('analytics')}
         >
@@ -62,13 +35,6 @@ const AdminNavbar = ({ onSignout, onNavigate, activeSection }) => {
           onClick={() => onNavigate('core')}
         >
           ⚙️ User Management
-        </button>
-        <button
-          id="productsTab"
-          className={tabClass('products')}
-          onClick={() => onNavigate('products')}
-        >
-          🧺 Products
         </button>
         <button
           id="activityTab"
@@ -106,68 +72,62 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
 
   const [activeSection, setActiveSection] = useState('analytics');
-
-  const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
   const [logs, setLogs] = useState([]);
-
-  // products for moderation
-  const [products, setProducts] = useState([]);
+  const [stats, setStats] = useState(null); 
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Representatives state
   const [representatives, setRepresentatives] = useState([]);
   const [repEmail, setRepEmail] = useState('');
   const [repNote, setRepNote] = useState('');
   const [repLoading, setRepLoading] = useState(false);
   const [repStatus, setRepStatus] = useState({ msg: '', type: '' });
 
-  // User filters
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
 
-  // Log filters
   const [logUserFilter, setLogUserFilter] = useState('');
   const [logActionFilter, setLogActionFilter] = useState('all');
   const [logDateFilter, setLogDateFilter] = useState('');
 
-  // Product filters
-  const [productSearch, setProductSearch] = useState('');
-  const [productTypeFilter, setProductTypeFilter] = useState('all');
-
-  // ---------- Data loading ----------
-  const loadAllData = async () => {
-    setLoading(true);
-    setError(null);
+  // ---------- Dynamic Data Fetching with Polling ----------
+  const loadAllData = useCallback(async (showLoading = false) => {
+    if (showLoading) setLoading(true);
     try {
-      const [statsRes, usersRes, logsRes, productsRes, repsRes] = await Promise.all([
-        api.get('/admin/stats'),
+      const [usersRes, logsRes, repsRes, statsRes] = await Promise.all([
         api.get('/admin/users'),
         api.get('/admin/logs'),
-        api.get('/admin/products'),
         api.get('/admin/representatives'),
+        api.get('/admin/stats'), 
       ]);
 
-      setStats(statsRes.data);
       setUsers(usersRes.data);
       setLogs(logsRes.data);
-      setProducts(productsRes.data);
       setRepresentatives(repsRes.data);
+      setStats(statsRes.data); 
+      setError(null);
     } catch (err) {
       console.error('Failed to load admin data:', err);
-      setError(err.response?.data?.msg || err.message || 'Failed to load admin data');
+      if (showLoading) {
+        setError(err.response?.data?.msg || err.message || 'Failed to load data');
+      }
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadAllData();
   }, []);
 
-  // ---------- Handlers ----------
+  useEffect(() => {
+    loadAllData(true); 
+
+    const intervalId = setInterval(() => {
+      loadAllData(false); // Background update every 10 seconds
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [loadAllData]);
+
   const handleSignout = () => {
     if (window.confirm('Are you sure you want to sign out?')) {
       logout();
@@ -179,7 +139,6 @@ const AdminDashboard = () => {
     setActiveSection(section);
   };
 
-  // User management actions
   const handleDeleteUser = async (userId, email) => {
     if (!window.confirm(`Delete user ${email}? This cannot be undone.`)) {
       return;
@@ -206,27 +165,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Product moderation
-  const handleDeleteProduct = async (product) => {
-    const confirmation = window.confirm(
-      `Delete "${product.varietySpecies}" for farmer ${product.farmer.email}? This will remove the product from the database.`
-    );
-    if (!confirmation) return;
-
-    try {
-      await api.delete(
-        `/admin/products/${product.farmer.email}/${product.cropId}`
-      );
-      setProducts((prev) =>
-        prev.filter((p) => p.cropId !== product.cropId)
-      );
-    } catch (err) {
-      console.error('Failed to delete product:', err);
-      alert(err.response?.data?.msg || 'Failed to delete product');
-    }
-  };
-
-  // Representative management
   const handleAddRepresentative = async () => {
     if (!repEmail.trim()) return;
     setRepLoading(true);
@@ -244,7 +182,7 @@ const AdminDashboard = () => {
   };
 
   const handleDeleteRepresentative = async (repId, email) => {
-    if (!window.confirm(`Remove ${email} as a representative? They will no longer be redirected to the representative dashboard.`)) return;
+    if (!window.confirm(`Remove ${email} as a representative?`)) return;
     try {
       await api.delete(`/admin/representatives/${repId}`);
       setRepresentatives((prev) => prev.filter((r) => r._id !== repId));
@@ -254,10 +192,9 @@ const AdminDashboard = () => {
   };
 
   const handleRefresh = () => {
-    loadAllData();
+    loadAllData(true);
   };
 
-  // ---------- Derived data ----------
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       const matchesSearch =
@@ -289,64 +226,6 @@ const AdminDashboard = () => {
     });
   }, [logs, logUserFilter, logActionFilter, logDateFilter]);
 
-  const filteredProducts = useMemo(() => {
-    return products.filter((p) => {
-      const term = productSearch.toLowerCase();
-      const matchesSearch =
-        !term ||
-        p.varietySpecies?.toLowerCase().includes(term) ||
-        p.productType?.toLowerCase().includes(term) ||
-        p.farmer?.email?.toLowerCase().includes(term);
-      const matchesType =
-        productTypeFilter === 'all' ||
-        p.productType === productTypeFilter;
-      return matchesSearch && matchesType;
-    });
-  }, [products, productSearch, productTypeFilter]);
-
-  // ---------- Chart data ----------
-  const userDistData = stats
-    ? {
-        labels: ['Farmers', 'Dealers', 'Retailers'],
-        datasets: [
-          {
-            data: [stats.farmers, stats.dealers, stats.retailers],
-            backgroundColor: ['#10b981', '#3b82f6', '#f59e0b'],
-          },
-        ],
-      }
-    : { labels: [], datasets: [] };
-
-  // Monthly revenue chart (from stats.monthlyRevenue)
-  const revenueData = stats
-    ? {
-        labels: stats.monthlyRevenue.map((m) => m.month),
-        datasets: [
-          {
-            label: 'Monthly Revenue',
-            data: stats.monthlyRevenue.map((m) => m.revenue),
-            backgroundColor: '#06b6d4',
-          },
-        ],
-      }
-    : { labels: [], datasets: [] };
-
-  // Orders by status bar chart
-  const ordersTrendData = stats
-    ? {
-        labels: stats.ordersByStatus.map((s) => s.name),
-        datasets: [
-          {
-            label: 'Orders by Status',
-            data: stats.ordersByStatus.map((s) => s.count),
-            backgroundColor: '#8b5cf6',
-          },
-        ],
-      }
-    : { labels: [], datasets: [] };
-
-  // Top products list
-  const topProducts = stats?.topProducts || [];
 
   return (
     <>
@@ -356,135 +235,203 @@ const AdminDashboard = () => {
         activeSection={activeSection}
       />
 
-      <main className="main-container">
-        {loading && <p className="loading-text">Loading dashboard...</p>}
+      <main className="main-container" style={{ display: 'block' }}>
+        {loading && <p className="loading-text">Synchronizing data...</p>}
         {error && <p style={{ color: 'red', marginBottom: '10px' }}>{error}</p>}
 
-        {/* ---------------- Analytics Section ---------------- */}
-        <section
-          id="analyticsSection"
-          className={activeSection === 'analytics' ? 'section active' : 'section'}
-        >
-          <h2>📊 System Analytics &amp; Insights</h2>
+        {/* ---------------- Dedicated Dynamic Analytics Section ---------------- */}
+        {activeSection === 'analytics' && stats && (
+          <div className="admin-analytics-container" style={{ width: '100%', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+               <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>📊 Live Platform Performance</h2>
+               <button className="refresh-btn" onClick={() => loadAllData(true)}>🔄 Refresh Stats</button>
+            </div>
 
-          {stats && (
-            <>
-              <div className="stats-grid" id="statsGrid">
-                <div className="stat-card stat-farmers">
-                  <div className="stat-content">
-                    <h3>Farmers</h3>
-                    <p className="stat-number" id="farmerCount">
-                      {stats.farmers}
-                    </p>
-                  </div>
-                </div>
-                <div className="stat-card stat-dealers">
-                  <div className="stat-content">
-                    <h3>Dealers</h3>
-                    <p className="stat-number" id="dealerCount">
-                      {stats.dealers}
-                    </p>
-                  </div>
-                </div>
-                <div className="stat-card stat-retailers">
-                  <div className="stat-content">
-                    <h3>Retailers</h3>
-                    <p className="stat-number" id="retailerCount">
-                      {stats.retailers}
-                    </p>
-                  </div>
-                </div>
-                <div className="stat-card stat-products">
-                  <div className="stat-content">
-                    <h3>Total Products</h3>
-                    <p className="stat-number" id="productCount">
-                      {stats.products}
-                    </p>
-                  </div>
-                </div>
-                <div className="stat-card stat-orders">
-                  <div className="stat-content">
-                    <h3>Total Orders</h3>
-                    <p className="stat-number" id="orderCount">
-                      {stats.orders}
-                    </p>
-                  </div>
-                </div>
-                <div className="stat-card stat-revenue">
-                  <div className="stat-content">
-                    <h3>Total Revenue</h3>
-                    <p className="stat-number" id="totalAmount">
-                      ₹{stats.totalAmount.toLocaleString('en-IN')}
-                    </p>
-                  </div>
+            {/* ---- Core Platform Stats ---- */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', width: '100%' }}>
+              <div className="analytics-card" style={{ borderTop: '4px solid #10b981', padding: '25px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                <p style={{ color: '#64748b', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>Platform Revenue</p>
+                <h1 style={{ margin: '0', color: '#065f46', fontSize: '32px' }}>₹{(stats.totalAmount || 0).toLocaleString('en-IN')}</h1>
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>Total transaction value</p>
+              </div>
+
+              <div className="analytics-card" style={{ borderTop: '4px solid #3b82f6', padding: '25px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                <p style={{ color: '#64748b', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>Order Volume</p>
+                <h1 style={{ margin: '0', color: '#1e40af', fontSize: '32px' }}>{stats.orders || 0}</h1>
+                <div style={{ marginTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '13px' }}>
+                   <span style={{color: '#059669'}}>✓ {stats.completedOrders || 0} Completed</span>
+                   <span style={{color: '#d97706'}}>⏳ {stats.pendingOrders || 0} Active</span>
                 </div>
               </div>
 
-              <div className="charts-container">
-                <div className="chart-card">
-                  <h3>📈 User Distribution</h3>
-                  <Pie data={userDistData} />
-                </div>
-                <div className="chart-card">
-                  <h3>📊 Orders by Status</h3>
-                  <Bar data={ordersTrendData} />
-                </div>
-                <div className="chart-card full-width">
-                  <h3>💹 Revenue Analytics (Last 6 Months)</h3>
-                  <Bar data={revenueData} />
+              <div className="analytics-card" style={{ borderTop: '4px solid #f59e0b', padding: '25px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                <p style={{ color: '#64748b', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>User Ecosystem</p>
+                <h1 style={{ margin: '0', color: '#b45309', fontSize: '32px' }}>{stats.activeUsers || 0}</h1>
+                <div style={{ marginTop: '10px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '5px', fontSize: '11px', textAlign: 'center' }}>
+                   <div style={{background: '#fef3c7', padding: '4px', borderRadius: '4px'}}>🌾 {stats.farmers || 0}</div>
+                   <div style={{background: '#dbeafe', padding: '4px', borderRadius: '4px'}}>🏢 {stats.dealers || 0}</div>
+                   <div style={{background: '#d1fae5', padding: '4px', borderRadius: '4px'}}>🏪 {stats.retailers || 0}</div>
                 </div>
               </div>
 
-              <div className="detailed-analytics">
-                <div className="analytics-card">
-                  <h3>Platform Performance</h3>
-                  <div className="performance-metrics">
-                    <div className="metric-item">
-                      <span className="metric-label">Active Users</span>
-                      <span className="metric-value success">
-                        {stats.activeUsers}
-                      </span>
-                    </div>
-                    <div className="metric-item">
-                      <span className="metric-label">Pending Orders</span>
-                      <span className="metric-value warning">
-                        {stats.pendingOrders}
-                      </span>
-                    </div>
-                    <div className="metric-item">
-                      <span className="metric-label">Completed Orders</span>
-                      <span className="metric-value success">
-                        {stats.completedOrders}
-                      </span>
-                    </div>
+              <div className="analytics-card" style={{ borderTop: '4px solid #8b5cf6', padding: '25px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                <p style={{ color: '#64748b', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', marginBottom: '10px' }}>Market Listings</p>
+                <h1 style={{ margin: '0', color: '#5b21b6', fontSize: '32px' }}>{stats.products || 0}</h1>
+                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '10px' }}>Verified products live</p>
+              </div>
+            </div>
+
+            {/* ---- Financial & Order Insights ---- */}
+            <div style={{ marginTop: '30px' }}>
+              <h3 style={{ color: '#1e293b', fontWeight: '700', marginBottom: '16px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                💰 Financial &amp; Order Insights
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #10b981' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>📈</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Avg Order Value</p>
                   </div>
+                  <h2 style={{ margin: 0, color: '#065f46', fontSize: '26px' }}>₹{(stats.avgOrderValue || 0).toLocaleString('en-IN')}</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>Per transaction average</p>
                 </div>
 
-                <div className="analytics-card">
-                  <h3>Top Product Categories</h3>
-                  <div className="top-products-list">
-                    {topProducts.length === 0 && (
-                      <p>No product analytics available.</p>
-                    )}
-                    {topProducts.map((p) => (
-                      <div key={p.name} className="product-item">
-                        <span className="product-name">{p.name}</span>
-                        <span className="product-count">
-                          {p.count} listings
-                        </span>
-                      </div>
-                    ))}
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #3b82f6' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>🤝</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Bid Acceptance Rate</p>
                   </div>
+                  <h2 style={{ margin: 0, color: '#1e40af', fontSize: '26px' }}>{stats.bidAcceptanceRate || 0}%</h2>
+                  <div style={{ marginTop: '8px', background: '#e2e8f0', borderRadius: '99px', height: '6px', overflow: 'hidden' }}>
+                    <div style={{ width: stats.bidAcceptanceRate + '%', background: '#3b82f6', height: '100%', borderRadius: '99px' }} />
+                  </div>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>✅ {stats.bidAccepted || 0} accepted · ❌ {stats.bidRejected || 0} rejected</p>
                 </div>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #f59e0b' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>⏳</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Pending Payment</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#b45309', fontSize: '26px' }}>₹{(stats.paymentPendingValue || 0).toLocaleString('en-IN')}</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>Awaiting payment clearance</p>
+                </div>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #06b6d4' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>🚚</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>In Transit</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#0e7490', fontSize: '26px' }}>{stats.inTransitOrders || 0}</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>Active deliveries right now</p>
+                </div>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #ef4444' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>🚫</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Cancellation Rate</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#b91c1c', fontSize: '26px' }}>{stats.cancelledRate || 0}%</h2>
+                  <div style={{ marginTop: '8px', background: '#e2e8f0', borderRadius: '99px', height: '6px', overflow: 'hidden' }}>
+                    <div style={{ width: stats.cancelledRate + '%', background: '#ef4444', height: '100%', borderRadius: '99px' }} />
+                  </div>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>{stats.cancelledOrders || 0} cancelled orders total</p>
+                </div>
+
               </div>
-            </>
-          )}
-        </section>
+            </div>
+
+            {/* ---- User Growth & Health ---- */}
+            <div style={{ marginTop: '30px' }}>
+              <h3 style={{ color: '#1e293b', fontWeight: '700', marginBottom: '16px', fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                👥 User Growth &amp; Health
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #10b981' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>🌱</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>New Today</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#065f46', fontSize: '26px' }}>{stats.newUsersToday || 0}</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>Registrations in last 24 hrs</p>
+                </div>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #8b5cf6' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>📅</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>New This Week</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#5b21b6', fontSize: '26px' }}>{stats.newUsersThisWeek || 0}</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>Registrations in last 7 days</p>
+                </div>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #f97316' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>🔒</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Deactivated</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#c2410c', fontSize: '26px' }}>{stats.inactiveUsers || 0}</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>Accounts currently suspended</p>
+                </div>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #3b82f6' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>✉️</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Email Verified</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#1e40af', fontSize: '26px' }}>{stats.emailVerificationRate || 0}%</h2>
+                  <div style={{ marginTop: '8px', background: '#e2e8f0', borderRadius: '99px', height: '6px', overflow: 'hidden' }}>
+                    <div style={{ width: stats.emailVerificationRate + '%', background: '#3b82f6', height: '100%', borderRadius: '99px' }} />
+                  </div>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>{stats.verifiedEmailUsers || 0} of {stats.totalUsers || 0} users verified</p>
+                </div>
+
+                <div className="analytics-card" style={{ padding: '20px', background: '#fff', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', borderLeft: '4px solid #f59e0b' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '22px' }}>🔑</span>
+                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Google Sign-In</p>
+                  </div>
+                  <h2 style={{ margin: 0, color: '#b45309', fontSize: '26px' }}>{stats.googleAuthUsers || 0}</h2>
+                  <p style={{ margin: '6px 0 0', fontSize: '11px', color: '#94a3b8' }}>Users via Google OAuth</p>
+                </div>
+
+              </div>
+            </div>
+
+            {/* ---- Top Products ---- */}
+            <div className="analytics-card" style={{ marginTop: '25px', padding: '25px', background: '#fff', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+              <h3 style={{ marginBottom: '20px', color: '#334155', borderBottom: '1px solid #f1f5f9', paddingBottom: '10px' }}>🌾 Top Trending Product Categories</h3>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                {(stats.topProducts || []).length === 0 && (
+                  <p style={{ color: '#94a3b8', fontSize: '14px' }}>No product data available yet.</p>
+                )}
+                {(stats.topProducts || []).map((p, idx) => (
+                  <div key={idx} style={{
+                    background: '#f8fafc',
+                    padding: '10px 18px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    border: '1px solid #e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <span style={{ fontWeight: '600', color: '#334155' }}>{p.name}</span>
+                    <span style={{ background: '#3b82f6', color: '#fff', padding: '2px 8px', borderRadius: '4px', fontSize: '12px' }}>{p.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ---------------- User Management Section ---------------- */}
         <section
           id="coreSection"
           className={activeSection === 'core' ? 'section active' : 'section'}
+          style={{ width: '100%' }}
         >
           <h2>⚙️ User Management &amp; Control</h2>
 
@@ -577,98 +524,11 @@ const AdminDashboard = () => {
           </div>
         </section>
 
-        {/* ---------------- Products Moderation Section ---------------- */}
-        <section
-          id="productsSection"
-          className={activeSection === 'products' ? 'section active' : 'section'}
-        >
-          <h2>🧺 All Farmer Products</h2>
-
-          <div className="filter-bar">
-            <input
-              type="text"
-              placeholder="Search by product or farmer email..."
-              value={productSearch}
-              onChange={(e) => setProductSearch(e.target.value)}
-            />
-            <select
-              value={productTypeFilter}
-              onChange={(e) => setProductTypeFilter(e.target.value)}
-            >
-              <option value="all">All Types</option>
-              <option value="Grain">Grain</option>
-              <option value="Vegetable">Vegetable</option>
-              <option value="Fruit">Fruit</option>
-              <option value="Pulse">Pulse</option>
-              <option value="Spice">Spice</option>
-            </select>
-            <button className="refresh-btn" onClick={handleRefresh}>
-              🔄 Refresh
-            </button>
-          </div>
-
-          <div className="admin-products-grid">
-            {filteredProducts.length === 0 && (
-              <p>No products found for the selected filters.</p>
-            )}
-
-            {filteredProducts.map((product) => (
-              <div
-                key={product.cropId}
-                className="admin-product-card"
-              >
-                <div className="admin-product-main">
-                  {product.imageUrl && (
-                    <img
-                      src={product.imageUrl}
-                      alt={product.varietySpecies}
-                      className="admin-product-image"
-                    />
-                  )}
-                  <div className="admin-product-info">
-                    <h3>{product.varietySpecies}</h3>
-                    <span className="badge">{product.productType}</span>
-                    <p>
-                      <strong>Quantity:</strong>{' '}
-                      {product.harvestQuantity} {product.unitOfSale}
-                    </p>
-                    <p>
-                      <strong>Price:</strong> ₹{product.targetPrice} per{' '}
-                      {product.unitOfSale}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="admin-product-farmer">
-                  <h4>Farmer Details</h4>
-                  <p>
-                    <strong>Name:</strong> {product.farmer.name}
-                  </p>
-                  <p>
-                    <strong>Email:</strong> {product.farmer.email}
-                  </p>
-                  <p>
-                    <strong>Mobile:</strong> {product.farmer.mobile}
-                  </p>
-                </div>
-
-                <div className="admin-product-actions">
-                  <button
-                    className="danger-btn"
-                    onClick={() => handleDeleteProduct(product)}
-                  >
-                    🗑️ Delete Product from DB
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* ---------------- Activity Logs Section ---------------- */}
         <section
           id="activitySection"
           className={activeSection === 'activity' ? 'section active' : 'section'}
+          style={{ width: '100%' }}
         >
           <h2>📜 User Activity Logs</h2>
 
@@ -738,18 +598,19 @@ const AdminDashboard = () => {
             </table>
           </div>
         </section>
+        
         {/* ---------------- Representatives Section ---------------- */}
         <section
           id="representativesSection"
           className={activeSection === 'representatives' ? 'section active' : 'section'}
+          style={{ width: '100%' }}
         >
           <h2>🧑‍💼 Representative Access Management</h2>
           <p style={{ color: '#64748b', marginBottom: '24px' }}>
-            Add email addresses here to grant representative access. When a user logs in with one of these emails, they will be automatically redirected to the Representative Dashboard regardless of their registered role.
+            Add email addresses here to grant representative access.
           </p>
 
-          {/* Add new representative */}
-          <div className="analytics-card" style={{ marginBottom: '28px' }}>
+          <div className="analytics-card" style={{ marginBottom: '28px', padding: '25px', background: '#fff', borderRadius: '12px' }}>
             <h3 style={{ marginBottom: '16px' }}>➕ Add Representative Email</h3>
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: '1 1 240px' }}>
@@ -824,8 +685,7 @@ const AdminDashboard = () => {
             )}
           </div>
 
-          {/* Representatives table */}
-          <div className="analytics-card">
+          <div className="analytics-card" style={{ padding: '25px', background: '#fff', borderRadius: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3>Authorized Representatives ({representatives.length})</h3>
               <button className="refresh-btn" onClick={handleRefresh}>🔄 Refresh</button>
@@ -847,7 +707,7 @@ const AdminDashboard = () => {
                   {representatives.length === 0 && (
                     <tr>
                       <td colSpan="6" style={{ textAlign: 'center', color: '#6b7280', padding: '32px' }}>
-                        No representatives added yet. Use the form above to add one.
+                        No representatives added yet.
                       </td>
                     </tr>
                   )}
@@ -875,18 +735,6 @@ const AdminDashboard = () => {
                 </tbody>
               </table>
             </div>
-          </div>
-
-          <div style={{
-            marginTop: '20px',
-            padding: '14px 18px',
-            background: '#eff6ff',
-            border: '1px solid #bfdbfe',
-            borderRadius: '10px',
-            fontSize: '13px',
-            color: '#1e40af',
-          }}>
-            <strong>ℹ️ How it works:</strong> When a user whose email is listed here logs in (via Google or OTP), the login page automatically checks this list and redirects them to <code>/representative</code> instead of their normal role dashboard. Removing an email immediately revokes representative redirect access on their next login.
           </div>
         </section>
 
