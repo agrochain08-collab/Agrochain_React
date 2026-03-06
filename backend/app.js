@@ -14,6 +14,7 @@ const app = express();
 const allowedOrigins = [
   "https://agrochain-teal.vercel.app",
   "https://agrochain-i1h0.onrender.com",
+  "https://agrochain-react.onrender.com",
   "http://localhost:3000",
   "http://127.0.0.1:3000",
   "http://localhost:5000",
